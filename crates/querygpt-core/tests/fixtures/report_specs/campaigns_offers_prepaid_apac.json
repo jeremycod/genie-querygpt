@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "workspace": "campaigns_offers",
+  "select": [
+    { "field": "partnership_id" },
+    { "field": "campaign_id" },
+    { "field": "campaign_name" },
+    { "field": "offer_id" },
+    { "field": "offer_name" },
+    { "field": "expired_or_live_status" },
+    { "field": "workflow_status" },
+    { "field": "countries" },
+    { "field": "products_csv" },
+    { "field": "package_id" }
+  ],
+  "filters": [
+    {
+      "field": "promo_type",
+      "op": "eq",
+      "value": "PREPAID"
+    },
+    {
+      "field": "countries",
+      "op": "overlaps",
+      "value": ["KR", "JP", "TW", "SG", "HK"]
+    },
+    {
+      "field": "workflow_status",
+      "op": "in",
+      "value": ["PUBLISHED", "EXPIRED"]
+    }
+  ],
+  "order_by": [
+    { "field": "partnership_id", "dir": "asc" },
+    { "field": "campaign_id", "dir": "asc" },
+    { "field": "offer_id", "dir": "asc" }
+  ],
+  "mode": "export"
+}
