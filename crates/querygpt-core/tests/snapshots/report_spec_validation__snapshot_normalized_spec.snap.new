@@ -1,0 +1,92 @@
+---
+source: crates/querygpt-core/tests/report_spec_validation.rs
+assertion_line: 54
+expression: normalized
+---
+{
+  "version": 1,
+  "workspace": "campaigns_offers",
+  "select": [
+    {
+      "field": "partnership_id",
+      "alias": null
+    },
+    {
+      "field": "campaign_id",
+      "alias": null
+    },
+    {
+      "field": "campaign_name",
+      "alias": null
+    },
+    {
+      "field": "offer_id",
+      "alias": null
+    },
+    {
+      "field": "offer_name",
+      "alias": null
+    },
+    {
+      "field": "expired_or_live_status",
+      "alias": null
+    },
+    {
+      "field": "workflow_status",
+      "alias": null
+    },
+    {
+      "field": "countries",
+      "alias": null
+    },
+    {
+      "field": "products_csv",
+      "alias": null
+    },
+    {
+      "field": "package_id",
+      "alias": null
+    }
+  ],
+  "filters": [
+    {
+      "field": "countries",
+      "op": "overlaps",
+      "value": [
+        "KR",
+        "JP",
+        "TW",
+        "SG",
+        "HK"
+      ]
+    },
+    {
+      "field": "promo_type",
+      "op": "eq",
+      "value": "PREPAID"
+    },
+    {
+      "field": "workflow_status",
+      "op": "in",
+      "value": [
+        "PUBLISHED",
+        "EXPIRED"
+      ]
+    }
+  ],
+  "order_by": [
+    {
+      "field": "partnership_id",
+      "dir": "asc"
+    },
+    {
+      "field": "campaign_id",
+      "dir": "asc"
+    },
+    {
+      "field": "offer_id",
+      "dir": "asc"
+    }
+  ],
+  "mode": "export"
+}
