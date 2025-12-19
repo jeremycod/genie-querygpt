@@ -1,0 +1,8 @@
+[workspace]
+members = [
+  "crates/querygpt-core",
+  "crates/querygpt-server",
+  "crates/querygpt-worker",
+]
+
+resolver = "2"

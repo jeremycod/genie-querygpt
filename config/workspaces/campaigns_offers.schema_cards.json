@@ -1,0 +1,579 @@
+{
+  "version": "1.0",
+  "database": "genie_db",
+  "workspace": "campaigns_offers",
+  "conventions": {
+    "profile_column": "profile",
+    "version_column": "version",
+    "deleted_column": "deleted",
+    "latest_views": [
+      "offers_latest",
+      "campaigns_latest",
+      "products_latest",
+      "discounts_latest",
+      "skus_latest"
+    ],
+    "notes": [
+      "Entity heads must be read from *_latest MVs to avoid per-query window functions.",
+      "Deleted rows are not filtered out in *_latest; consumers can use *_latest_active views or WHERE deleted=false as needed.",
+      "campaign_offers.version tracks CAMPAIGN version; do not match to offer version."
+    ]
+  },
+  "entities": [
+    {
+      "name": "offers_latest",
+      "kind": "materialized_view",
+      "description": "Latest version of each offer per (id, profile). Includes deleted latest rows.",
+      "primary_key": [
+        "id",
+        "profile"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Offer identifier",
+          "pii": false
+        },
+        {
+          "name": "name",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Offer name",
+          "pii": false
+        },
+        {
+          "name": "start_date",
+          "data_type": "timestamptz",
+          "nullable": true,
+          "description": "Offer start date",
+          "pii": false
+        },
+        {
+          "name": "end_date",
+          "data_type": "timestamptz",
+          "nullable": true,
+          "description": "Offer end date",
+          "pii": false
+        },
+        {
+          "name": "status",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Workflow/live status (verify semantics)",
+          "pii": false
+        },
+        {
+          "name": "countries",
+          "data_type": "varchar[]",
+          "nullable": true,
+          "description": "Countries where offer is available",
+          "pii": false
+        },
+        {
+          "name": "attributes",
+          "data_type": "jsonb",
+          "nullable": true,
+          "description": "Offer attributes blob",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Offer version",
+          "pii": false
+        },
+        {
+          "name": "deleted",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Soft delete flag",
+          "pii": false
+        }
+      ],
+      "json_paths": [
+        {
+          "column": "attributes",
+          "path": "$.packageId",
+          "data_type": "string",
+          "description": "Package id, used in exports"
+        }
+      ],
+      "common_filters": [
+        {
+          "name": "countries_any_of",
+          "sql": "countries && ARRAY[...]",
+          "description": "Array overlap filter"
+        },
+        {
+          "name": "profile_main",
+          "sql": "profile = 'main'",
+          "description": "Typical tenant constraint"
+        }
+      ],
+      "tags": [
+        "entity_head",
+        "latest",
+        "offers"
+      ]
+    },
+    {
+      "name": "campaigns_latest",
+      "kind": "materialized_view",
+      "description": "Latest version of each campaign per (id, profile). Includes deleted latest rows.",
+      "primary_key": [
+        "id",
+        "profile"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Campaign identifier",
+          "pii": false
+        },
+        {
+          "name": "name",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Campaign name",
+          "pii": false
+        },
+        {
+          "name": "partner_id",
+          "data_type": "varchar",
+          "nullable": true,
+          "description": "Owning partner id",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Campaign version",
+          "pii": false
+        },
+        {
+          "name": "deleted",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Soft delete flag",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [
+        {
+          "name": "profile_main",
+          "sql": "profile = 'main'",
+          "description": "Typical tenant constraint"
+        }
+      ],
+      "tags": [
+        "entity_head",
+        "latest",
+        "campaigns"
+      ]
+    },
+    {
+      "name": "campaign_offers",
+      "kind": "table",
+      "description": "Links offers to campaigns. Version is aligned to the CAMPAIGN version, not the offer version.",
+      "primary_key": [
+        "campaign_id",
+        "offer_id",
+        "profile",
+        "version"
+      ],
+      "columns": [
+        {
+          "name": "campaign_id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Campaign id",
+          "pii": false
+        },
+        {
+          "name": "offer_id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Offer id",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Campaign version snapshot",
+          "pii": false
+        },
+        {
+          "name": "deleted",
+          "data_type": "boolean",
+          "nullable": true,
+          "description": "Soft delete flag (if present)",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [],
+      "tags": [
+        "link_table",
+        "version_by_campaign"
+      ]
+    },
+    {
+      "name": "offer_phases",
+      "kind": "table",
+      "description": "Offer phases for a given offer version.",
+      "primary_key": [
+        "offer_id",
+        "profile",
+        "version",
+        "id"
+      ],
+      "columns": [
+        {
+          "name": "offer_id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Offer id",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Offer version",
+          "pii": false
+        },
+        {
+          "name": "legacy",
+          "data_type": "jsonb",
+          "nullable": true,
+          "description": "Legacy json; contains phase_type",
+          "pii": false
+        }
+      ],
+      "json_paths": [
+        {
+          "column": "legacy",
+          "path": "$.phase_type",
+          "data_type": "string",
+          "description": "Phase type e.g. PREPAID"
+        }
+      ],
+      "common_filters": [
+        {
+          "name": "phase_type_prepaid",
+          "sql": "legacy::jsonb ->> 'phase_type' = 'PREPAID'",
+          "description": "Filter for prepaid offers"
+        }
+      ],
+      "tags": [
+        "satellite",
+        "version_by_offer"
+      ]
+    },
+    {
+      "name": "offer_products",
+      "kind": "table",
+      "description": "Bridge between offer version and product ids.",
+      "primary_key": [
+        "offer_id",
+        "profile",
+        "version",
+        "product_id"
+      ],
+      "columns": [
+        {
+          "name": "offer_id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Offer id",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Offer version",
+          "pii": false
+        },
+        {
+          "name": "product_id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Product id",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [],
+      "tags": [
+        "satellite",
+        "version_by_offer"
+      ]
+    },
+    {
+      "name": "products_latest",
+      "kind": "materialized_view",
+      "description": "Latest version of each product per (id, profile). Includes deleted latest rows.",
+      "primary_key": [
+        "id",
+        "profile"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Product id",
+          "pii": false
+        },
+        {
+          "name": "name",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Product name",
+          "pii": false
+        },
+        {
+          "name": "attributes",
+          "data_type": "jsonb",
+          "nullable": true,
+          "description": "Product attributes",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Product version",
+          "pii": false
+        },
+        {
+          "name": "deleted",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Soft delete flag",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [],
+      "tags": [
+        "entity_head",
+        "latest",
+        "products"
+      ]
+    },
+    {
+      "name": "partners",
+      "kind": "table",
+      "description": "Partners/partnerships.",
+      "primary_key": [
+        "id",
+        "profile",
+        "version"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Partner id",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Partner version",
+          "pii": false
+        },
+        {
+          "name": "deleted",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Soft delete flag",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [],
+      "tags": [
+        "dimension"
+      ]
+    }
+  ],
+  "join_graph": {
+    "nodes": [
+      "offers_latest",
+      "offer_phases",
+      "offer_products",
+      "campaign_offers",
+      "campaigns_latest",
+      "partners",
+      "products_latest"
+    ],
+    "edges": [
+      {
+        "from": "offers_latest",
+        "to": "offer_phases",
+        "join_type": "inner",
+        "on": [
+          "offer_phases.offer_id = offers_latest.id",
+          "offer_phases.profile = offers_latest.profile",
+          "offer_phases.version = offers_latest.version"
+        ],
+        "cardinality": "1:n",
+        "safe": true,
+        "notes": [
+          "offer_phases version is offer-owned"
+        ]
+      },
+      {
+        "from": "offers_latest",
+        "to": "offer_products",
+        "join_type": "inner",
+        "on": [
+          "offer_products.offer_id = offers_latest.id",
+          "offer_products.profile = offers_latest.profile",
+          "offer_products.version = offers_latest.version"
+        ],
+        "cardinality": "1:n",
+        "safe": true,
+        "notes": [
+          "offer_products version is offer-owned"
+        ]
+      },
+      {
+        "from": "offers_latest",
+        "to": "campaign_offers",
+        "join_type": "inner",
+        "on": [
+          "campaign_offers.offer_id = offers_latest.id",
+          "campaign_offers.profile = offers_latest.profile"
+        ],
+        "cardinality": "n:n",
+        "safe": true,
+        "notes": [
+          "Do NOT join campaign_offers.version to offers_latest.version"
+        ]
+      },
+      {
+        "from": "campaign_offers",
+        "to": "campaigns_latest",
+        "join_type": "inner",
+        "on": [
+          "campaigns_latest.id = campaign_offers.campaign_id",
+          "campaigns_latest.profile = campaign_offers.profile",
+          "campaign_offers.version = campaigns_latest.version"
+        ],
+        "cardinality": "n:1",
+        "safe": true,
+        "notes": [
+          "campaign_offers.version tracks CAMPAIGN version"
+        ]
+      },
+      {
+        "from": "campaigns_latest",
+        "to": "partners",
+        "join_type": "left",
+        "on": [
+          "partners.id = campaigns_latest.partner_id",
+          "partners.profile = campaigns_latest.profile"
+        ],
+        "cardinality": "n:1",
+        "safe": true,
+        "notes": []
+      },
+      {
+        "from": "offer_products",
+        "to": "products_latest",
+        "join_type": "left",
+        "on": [
+          "products_latest.id = offer_products.product_id",
+          "products_latest.profile = offer_products.profile"
+        ],
+        "cardinality": "n:1",
+        "safe": true,
+        "notes": [
+          "Join product head by id/profile; product version is independent"
+        ]
+      }
+    ]
+  },
+  "derived_fields": [
+    {
+      "name": "expired_or_live_status",
+      "sql": "CASE WHEN offers_latest.end_date::date < CURRENT_DATE THEN 'EXPIRED' ELSE offers_latest.status END",
+      "description": "Treat past end_date as EXPIRED, otherwise return offer status",
+      "depends_on": [
+        "offers_latest.end_date",
+        "offers_latest.status"
+      ]
+    },
+    {
+      "name": "products_csv",
+      "sql": "STRING_AGG(DISTINCT offer_products.product_id, ',')",
+      "description": "Aggregated product ids as CSV",
+      "depends_on": [
+        "offer_products.product_id"
+      ]
+    }
+  ]
+}

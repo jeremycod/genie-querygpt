@@ -1,0 +1,21 @@
+{
+  "workspace": "campaigns_offers",
+  "description": "Campaigns & Offers reporting workspace. Uses *_latest MVs for entity heads and enforces version-safe joins.",
+  "schema_cards_path": "config/workspaces/campaigns_offers.schema_cards.json",
+  "exemplar_sql_dir": "config/workspaces/campaigns_offers/exemplars",
+  "tags": [
+    "campaigns",
+    "offers",
+    "exports",
+    "prepaid"
+  ],
+  "entities": [
+    "offers_latest",
+    "campaigns_latest",
+    "campaign_offers",
+    "offer_phases",
+    "offer_products",
+    "partners",
+    "products_latest"
+  ]
+}
