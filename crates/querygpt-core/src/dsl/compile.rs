@@ -1,7 +1,263 @@
-use crate::dsl::plan::{IntermediatePlan, PlanTable};
+use std::collections::HashMap;
+use crate::dsl::plan::{IntermediatePlan, JoinCondition, JoinType, PlanJoin, PlanTable};
 use crate::dsl::report_spec::ReportSpec;
 use crate::schema::cards::SchemaCards;
 use crate::schema::registry::SchemaRegistry;
+
+use crate::dsl::plan::{PlanFilter};
+use crate::dsl::report_spec::{Filter, FilterOp};
+use anyhow::{anyhow, Result};
+use serde_json::Value;
+
+use crate::dsl::plan::{PlanProjection};
+use crate::dsl::report_spec::SelectItem;
+
+
+use crate::dsl::plan::{PlanOrder, SortDirection};
+use crate::dsl::report_spec::{OrderBy, SortDir};
+
+
+/// Translate a single field name into its SQL expression, reusing the same logic as in projections.
+/// Uses the alias_map to prefix columns and derives JSON paths where needed.
+fn field_to_sql_expr(field: &str, alias_map: &HashMap<String, String>) -> Option<String> {
+    Some(match field {
+        // Direct fields on known entities
+        "partnership_id" => format!("{}.id", alias_map.get("partners")?),
+        "campaign_id" => format!("{}.id", alias_map.get("campaigns_latest")?),
+        "campaign_name" => format!("{}.name", alias_map.get("campaigns_latest")?),
+        "offer_id" => format!("{}.id", alias_map.get("offers_latest")?),
+        "offer_name" => format!("{}.name", alias_map.get("offers_latest")?),
+        "workflow_status" => format!("{}.status", alias_map.get("offers_latest")?),
+        "countries" => format!("{}.countries", alias_map.get("offers_latest")?),
+        "package_id" => format!("{}.attributes ->> 'packageId'", alias_map.get("offers_latest")?),
+        other => other.to_string(), // fallback to raw field name
+    })
+}
+
+/// Translate the order_by specifications into PlanOrder entries.
+///
+/// It uses the same field-to-expression mapping as in projections, then sets
+/// SortDirection based on the `dir` (asc/desc). Returns an error if a field
+/// cannot be mapped or an alias is missing.
+pub fn translate_ordering(
+    order_by: &[OrderBy],
+    alias_map: &HashMap<String, String>,
+    cards: &SchemaCards,
+) -> Result<Vec<PlanOrder>> {
+    order_by
+        .iter()
+        .map(|item| {
+            // Determine the SQL expression for ordering. Derived fields are handled
+            // via replacement on the derived SQL (as in projections).
+            let expr = if let Some(df) = cards.derived_fields.iter().find(|df| df.name == item.field) {
+                // Replace table names in the derived SQL with aliases
+                alias_map
+                    .iter()
+                    .fold(df.sql.clone(), |acc, (entity, alias)| {
+                        acc.replace(&format!("{}.", entity), &format!("{}.", alias))
+                    })
+            } else {
+                // For direct fields, map to alias.column or fallback via field_to_sql_expr
+                field_to_sql_expr(&item.field, alias_map)
+                    .ok_or_else(|| anyhow!("cannot map order_by field {}", item.field))?
+            };
+
+            // Map direction to SortDirection
+            let direction = match item.dir {
+                SortDir::Asc => SortDirection::Asc,
+                SortDir::Desc => SortDirection::Desc,
+            };
+
+            Ok(PlanOrder {
+                expression: expr,
+                direction,
+            })
+        })
+        .collect()
+}
+
+
+/// Translate the select list into SQL projections.
+/// Each entry becomes a PlanProjection containing:
+///   - field: the original report field name
+///   - expression: the SQL expression with table aliases
+///   - alias: an optional alias provided in the ReportSpec
+pub fn translate_projections(
+    select: &[SelectItem],
+    alias_map: &HashMap<String, String>,
+    cards: &SchemaCards,
+) -> Result<Vec<PlanProjection>> {
+    select
+        .iter()
+        .map(|item| {
+            // Determine the SQL expression for this field.
+            let expr = match item.field.as_str() {
+                // Direct fields that map to simple column names
+                "partnership_id" => {
+                    format!("{}.id", alias_map.get("partners").ok_or_else(|| {
+                        anyhow!("missing alias for partners when rendering partnership_id")
+                    })?)
+                }
+                "campaign_id" => {
+                    format!("{}.id", alias_map.get("campaigns_latest").ok_or_else(|| {
+                        anyhow!("missing alias for campaigns_latest when rendering campaign_id")
+                    })?)
+                }
+                "campaign_name" => {
+                    format!("{}.name", alias_map.get("campaigns_latest").ok_or_else(|| {
+                        anyhow!("missing alias for campaigns_latest when rendering campaign_name")
+                    })?)
+                }
+                "offer_id" => {
+                    format!("{}.id", alias_map.get("offers_latest").ok_or_else(|| {
+                        anyhow!("missing alias for offers_latest when rendering offer_id")
+                    })?)
+                }
+                "offer_name" => {
+                    format!("{}.name", alias_map.get("offers_latest").ok_or_else(|| {
+                        anyhow!("missing alias for offers_latest when rendering offer_name")
+                    })?)
+                }
+                "workflow_status" => {
+                    // workflow_status is stored in offers_latest.status
+                    format!("{}.status", alias_map.get("offers_latest").ok_or_else(|| {
+                        anyhow!("missing alias for offers_latest when rendering workflow_status")
+                    })?)
+                }
+                "countries" => {
+                    format!("{}.countries", alias_map.get("offers_latest").ok_or_else(|| {
+                        anyhow!("missing alias for offers_latest when rendering countries")
+                    })?)
+                }
+                // Derived or special-case fields
+                "package_id" => {
+                    // Map to the JSON path attributes->>'packageId' on offers_latest
+                    format!(
+                        "{}.attributes ->> 'packageId'",
+                        alias_map.get("offers_latest").ok_or_else(|| {
+                            anyhow!("missing alias for offers_latest when rendering package_id")
+                        })?
+                    )
+                }
+                // Fields defined in derived_fields (expired_or_live_status, products_csv, etc.)
+                other => {
+                    if let Some(df) = cards.derived_fields.iter().find(|df| df.name == other) {
+                        // Replace table names in the derived SQL with aliases
+                        alias_map
+                            .iter()
+                            .fold(df.sql.clone(), |acc, (entity, alias)| {
+                                acc.replace(&format!("{}.", entity), &format!("{}.", alias))
+                            })
+                    } else {
+                        // Fallback: direct column with field name (for unknown but valid columns)
+                        // Attempt to resolve via resolve_entity and then prefix alias
+                        let entity = resolve_entity(other, cards).ok_or_else(|| {
+                            anyhow!("cannot find entity for projection field {}", other)
+                        })?;
+                        let alias = alias_map.get(entity).ok_or_else(|| {
+                            anyhow!("missing alias for {} when rendering {}", entity, other)
+                        })?;
+                        format!("{}.{}", alias, other)
+                    }
+                }
+            };
+
+            Ok(PlanProjection {
+                field: item.field.clone(),
+                expression: expr,
+                alias: item.alias.clone(),
+            })
+        })
+        .collect()
+}
+
+
+
+
+/// Translate a single filter into SQL.
+/// Returns None if the filter cannot be expressed.
+fn translate_filter(filter: &Filter, alias_map: &HashMap<String, String>) -> Option<String> {
+    // First determine the SQL expression for the field.
+    let column_sql = field_to_sql_expr(&filter.field, alias_map)?;
+
+    match filter.op {
+        FilterOp::Eq => {
+            // Expect scalar values; wrap strings in single quotes.
+            let rhs = match &filter.value {
+                Value::String(s) => format!("'{}'", s.replace('\'', "''")),
+                Value::Bool(b) => b.to_string(),
+                Value::Number(n) => n.to_string(),
+                _ => return None,
+            };
+            Some(format!("{} = {}", column_sql, rhs))
+        }
+        FilterOp::In => {
+            // Expect array of scalars; wrap string elements in quotes.
+            let arr = match &filter.value {
+                Value::Array(vals) if !vals.is_empty() => vals,
+                _ => return None,
+            };
+            let vals_sql = arr
+                .iter()
+                .filter_map(|v| {
+                    Some(match v {
+                        Value::String(s) => format!("'{}'", s.replace('\'', "''")),
+                        Value::Bool(b) => b.to_string(),
+                        Value::Number(n) => n.to_string(),
+                        _ => return None?,
+                    })
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            Some(format!("{} IN ({})", column_sql, vals_sql))
+        }
+        FilterOp::Overlaps => {
+            // For array overlap queries (e.g. countries).
+            let arr = match &filter.value {
+                Value::Array(vals) if !vals.is_empty() => vals,
+                _ => return None,
+            };
+            let elements_sql = arr
+                .iter()
+                .filter_map(|v| match v {
+                    Value::String(s) => Some(format!("'{}'", s.replace('\'', "''"))),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            Some(format!("{} && ARRAY[{}]", column_sql, elements_sql))
+        }
+        FilterOp::Gte | FilterOp::Lte => {
+            // Greater-than or less-than comparisons (dates or numbers)
+            let op_str = if matches!(filter.op, FilterOp::Gte) { ">=" } else { "<=" };
+            let rhs = match &filter.value {
+                Value::String(s) => format!("'{}'", s.replace('\'', "''")),
+                Value::Number(n) => n.to_string(),
+                _ => return None,
+            };
+            Some(format!("{} {} {}", column_sql, op_str, rhs))
+        }
+    }
+}
+
+/// Translate all filters of a report spec into a Vec<PlanFilter> (functional style).
+pub fn translate_filters(
+    filters: &[Filter],
+    alias_map: &HashMap<String, String>,
+    cards: &SchemaCards,
+) -> Result<Vec<PlanFilter>> {
+    // The `cards` parameter is included for future extensions (e.g. dynamic derived field discovery),
+    // but not used in this minimal example.
+    filters
+        .iter()
+        .map(|f| {
+            translate_filter(f, alias_map)
+                .map(|sql| PlanFilter { expression: sql })
+                .ok_or_else(|| anyhow!("invalid filter: {:?}", f))
+        })
+        .collect()
+}
+
 
 fn resolve_entity<'a>(field: &str, cards: &'a SchemaCards) -> Option<&'a str> {
     // 1. Hard-coded mapping for the campaigns_offers workspace
@@ -44,7 +300,36 @@ fn resolve_entity<'a>(field: &str, cards: &'a SchemaCards) -> Option<&'a str> {
     // Not found
     None
 }
-
+fn build_joins(cards: &SchemaCards, required: Vec<&Option<&str>>, alias_map: &HashMap<String, String>) -> Vec<PlanJoin> {
+    let required_names: Vec<&str> = required.iter().filter_map(|opt| opt.as_ref()).copied().collect();
+    
+    cards.join_graph.edges.iter()
+        .filter(|edge| required_names.contains(&edge.from.as_str()) && required_names.contains(&edge.to.as_str()))
+        .map(|edge| {
+            let conditions = edge.on.iter()
+                .filter_map(|expr| expr.split_once('='))
+                .map(|(left, right)| {
+                    let (left_tbl, left_col) = left.trim().split_once('.').unwrap();
+                    let (right_tbl, right_col) = right.trim().split_once('.').unwrap();
+                    JoinCondition {
+                        left_field: format!("{}.{}", alias_map.get(left_tbl).unwrap_or(&left_tbl.to_string()), left_col),
+                        right_field: format!("{}.{}", alias_map.get(right_tbl).unwrap_or(&right_tbl.to_string()), right_col),
+                    }
+                })
+                .collect();
+            
+            PlanJoin {
+                left_alias: alias_map.get(&edge.from).unwrap().clone(),
+                right_alias: alias_map.get(&edge.to).unwrap().clone(),
+                join_type: match edge.join_type.as_str() {
+                    "left" => JoinType::Left,
+                    _ => JoinType::Inner,
+                },
+                conditions,
+            }
+        })
+        .collect()
+}
 /// Stub: compile DSL into an intermediate plan (tables, joins, selected fields, predicates).
 /// In production, this becomes the deterministic backbone that the LLM must follow.
 pub fn compile_report_spec(reg: &SchemaRegistry, spec: &ReportSpec) -> anyhow::Result<IntermediatePlan> {
@@ -63,7 +348,7 @@ pub fn compile_report_spec(reg: &SchemaRegistry, spec: &ReportSpec) -> anyhow::R
     let order_by_entities = spec.order_by.iter().map(|s| resolve_entity(&s.field, schema_cards)).collect::<Vec<_>>();
 
     let required_entities = select_entities.iter().chain(filter_entities.iter()).chain(order_by_entities.iter()).collect::<Vec<_>>();
-    let plan_tables = required_entities.iter().filter_map(|e| {
+    let tables = required_entities.iter().filter_map(|e| {
         e.as_ref().map(|entity| {
             let alias = match *entity {
                 "offers_latest" => "o",
@@ -80,14 +365,18 @@ pub fn compile_report_spec(reg: &SchemaRegistry, spec: &ReportSpec) -> anyhow::R
             }
         })
     }).collect::<Vec<_>>();
-
+    let alias_map: HashMap<String, String> = tables.iter().map(|t| (t.name.clone(), t.alias.clone())).collect();
+    let joins = build_joins(&reg.cards, required_entities, &alias_map);
+    let projections = translate_projections(&spec.select, &alias_map, &reg.cards)?;
+    let filters = translate_filters(&spec.filters, &alias_map, &reg.cards)?;
+    let order_by = translate_ordering(&spec.order_by, &alias_map, &reg.cards)?;
     let plan = IntermediatePlan {
         workspace: spec.workspace.clone(),
-        tables: plan_tables,
-        joins: Vec::new(),
-        projections: Vec::new(),
-        filters: Vec::new(),
-        order_by: Vec::new()
+        tables,
+        joins,
+        projections,
+        filters,
+        order_by
     };
     Ok(plan)
 }
