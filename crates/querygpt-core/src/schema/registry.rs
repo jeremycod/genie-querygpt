@@ -1,6 +1,8 @@
 use crate::schema::cards::{SchemaCards, WorkspaceIndex};
 use anyhow::Context;
+use serde::Deserialize;
 
+#[derive(Debug, Deserialize)]
 pub struct SchemaRegistry {
     pub index: WorkspaceIndex,
     pub cards: SchemaCards,
