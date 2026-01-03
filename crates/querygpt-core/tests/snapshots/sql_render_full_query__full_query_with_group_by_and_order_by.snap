@@ -1,0 +1,11 @@
+---
+source: crates/querygpt-core/tests/sql_render_full_query.rs
+expression: sql
+---
+SELECT o.id,
+       STRING_AGG(DISTINCT opr.product_id, ',')
+FROM offers_latest o
+
+JOIN offer_products opr ON o.id = opr.offer_id AND o.profile = opr.profile AND o.version = opr.version
+GROUP BY o.id
+ORDER BY o.id ASC

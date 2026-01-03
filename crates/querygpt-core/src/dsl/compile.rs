@@ -244,7 +244,7 @@ fn translate_filter(filter: &Filter, alias_map: &HashMap<String, String>) -> Opt
 pub fn translate_filters(
     filters: &[Filter],
     alias_map: &HashMap<String, String>,
-    cards: &SchemaCards,
+    _cards: &SchemaCards,
 ) -> Result<Vec<PlanFilter>> {
     // The `cards` parameter is included for future extensions (e.g. dynamic derived field discovery),
     // but not used in this minimal example.

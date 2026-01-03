@@ -1,0 +1,9 @@
+---
+source: crates/querygpt-core/tests/sql_render_order_by.rs
+expression: sql
+---
+SELECT o.id
+FROM offers_latest o
+
+ORDER BY o.id ASC,
+         o.name DESC
