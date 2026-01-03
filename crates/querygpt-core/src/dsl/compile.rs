@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use crate::dsl::plan::{IntermediatePlan, JoinCondition, JoinType, PlanJoin, PlanTable};
 use crate::dsl::report_spec::ReportSpec;
 use crate::schema::cards::SchemaCards;
@@ -15,6 +16,45 @@ use crate::dsl::report_spec::SelectItem;
 
 use crate::dsl::plan::{PlanOrder, SortDirection};
 use crate::dsl::report_spec::{OrderBy, SortDir};
+
+#[derive(Debug)]
+pub enum CompileError {
+    InvalidLimit { value: i64 },
+    InvalidOffset { value: i64 },
+}
+
+impl fmt::Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompileError::InvalidLimit { value } => write!(f, "Invalid limit: {}", value),
+            CompileError::InvalidOffset { value } => write!(f, "Invalid offset: {}", value),
+        }
+    }
+}
+
+impl std::error::Error for CompileError {}
+
+fn compile_pagination(spec: &ReportSpec) -> Result<(Option<u64>, Option<u64>), CompileError> {
+    let limit = spec.pagination.as_ref().and_then(|p| p.limit);
+    let offset = spec.pagination.as_ref().and_then(|p| p.offset);
+
+    // If your spec uses signed ints, validate >= 0 then cast.
+    // If your spec already uses u64, most of this disappears.
+    let limit_u = match limit {
+        None => None,
+        Some(v) if v >= 0 => Some(v as u64),
+        Some(v) => return Err(CompileError::InvalidLimit { value: v }),
+    };
+
+    let offset_u = match offset {
+        None => None,
+        Some(v) if v >= 0 => Some(v as u64),
+        Some(v) => return Err(CompileError::InvalidOffset { value: v }),
+    };
+
+    Ok((limit_u, offset_u))
+}
+
 
 fn field_alias(field: &str) -> Option<&str> {
     field.split('.').next()
@@ -447,13 +487,16 @@ pub fn compile_report_spec(reg: &SchemaRegistry, spec: &ReportSpec) -> anyhow::R
     let projections = translate_projections(&spec.select, &alias_map, &reg.cards)?;
     let filters = translate_filters(&spec.filters, &alias_map, &reg.cards)?;
     let order_by = translate_ordering(&spec.order_by, &alias_map, &reg.cards)?;
+    let (limit, offset) = compile_pagination(&spec)?;
     let plan = IntermediatePlan {
         workspace: spec.workspace.clone(),
         tables,
         joins,
         projections,
         filters,
-        order_by
+        order_by,
+        limit,
+        offset
     };
     Ok(plan)
 }

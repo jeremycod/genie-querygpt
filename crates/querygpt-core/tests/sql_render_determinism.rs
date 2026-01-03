@@ -24,6 +24,8 @@ fn renderer_is_deterministic_given_same_plan() {
         projections: vec![],
         filters: vec![],
         order_by: vec![],
+        limit: None,
+        offset: None,
     };
 
     let plan_b = IntermediatePlan {

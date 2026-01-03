@@ -69,6 +69,8 @@ fn full_query_with_group_by_and_order_by() {
         order_by: vec![
             PlanOrder { expression: "o.id".into(), direction: SortDirection::Asc },
         ],
+        limit: None,
+        offset: None,
     };
 
     let sql = render_sql(&plan).unwrap();

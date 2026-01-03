@@ -17,6 +17,8 @@ fn order_by_renders_in_plan_order() {
             PlanOrder { expression: "o.id".into(), direction: SortDirection::Asc },
             PlanOrder { expression: "o.name".into(), direction: SortDirection::Desc },
         ],
+        limit: None,
+        offset: None,
     };
 
     let sql = render_sql(&plan).unwrap();

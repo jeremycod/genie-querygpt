@@ -27,6 +27,8 @@ fn group_by_added_when_aggregate_present() {
         ],
         filters: vec![],
         order_by: vec![],
+        limit: None,
+        offset: None,
     };
 
     let sql = render_sql(&plan).unwrap();

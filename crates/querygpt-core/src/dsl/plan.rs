@@ -66,4 +66,7 @@ pub struct IntermediatePlan {
     pub projections: Vec<PlanProjection>,
     pub filters: Vec<PlanFilter>,
     pub order_by: Vec<PlanOrder>,
+
+    pub limit: Option<u64>,
+    pub offset: Option<u64>,
 }

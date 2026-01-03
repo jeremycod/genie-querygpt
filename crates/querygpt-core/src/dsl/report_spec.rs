@@ -12,6 +12,13 @@ pub struct ReportSpec {
     pub order_by: Vec<OrderBy>,
     #[serde(default = "default_mode")]
     pub mode: Mode,
+    pub pagination: Option<PaginationSpec>,
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize, PartialEq, Eq)]
+pub struct PaginationSpec {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 fn default_mode() -> Mode {
