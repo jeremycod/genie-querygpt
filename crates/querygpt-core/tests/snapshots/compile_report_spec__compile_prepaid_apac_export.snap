@@ -1,0 +1,205 @@
+---
+source: crates/querygpt-core/tests/compile_report_spec.rs
+expression: plan
+---
+{
+  "workspace": "campaigns_offers",
+  "tables": [
+    {
+      "name": "partners",
+      "alias": "p"
+    },
+    {
+      "name": "campaigns_latest",
+      "alias": "c"
+    },
+    {
+      "name": "campaigns_latest",
+      "alias": "c"
+    },
+    {
+      "name": "offers_latest",
+      "alias": "o"
+    },
+    {
+      "name": "offers_latest",
+      "alias": "o"
+    },
+    {
+      "name": "offers_latest",
+      "alias": "o"
+    },
+    {
+      "name": "offers_latest",
+      "alias": "o"
+    },
+    {
+      "name": "offers_latest",
+      "alias": "o"
+    },
+    {
+      "name": "offer_products",
+      "alias": "opr"
+    },
+    {
+      "name": "offers_latest",
+      "alias": "o"
+    },
+    {
+      "name": "offer_phases",
+      "alias": "oph"
+    },
+    {
+      "name": "offers_latest",
+      "alias": "o"
+    },
+    {
+      "name": "offers_latest",
+      "alias": "o"
+    },
+    {
+      "name": "partners",
+      "alias": "p"
+    },
+    {
+      "name": "campaigns_latest",
+      "alias": "c"
+    },
+    {
+      "name": "offers_latest",
+      "alias": "o"
+    }
+  ],
+  "joins": [
+    {
+      "left_alias": "o",
+      "right_alias": "oph",
+      "join_type": "Inner",
+      "conditions": [
+        {
+          "left_field": "o.id",
+          "right_field": "oph.offer_id"
+        },
+        {
+          "left_field": "o.profile",
+          "right_field": "oph.profile"
+        },
+        {
+          "left_field": "o.version",
+          "right_field": "oph.version"
+        }
+      ]
+    },
+    {
+      "left_alias": "o",
+      "right_alias": "opr",
+      "join_type": "Inner",
+      "conditions": [
+        {
+          "left_field": "o.id",
+          "right_field": "opr.offer_id"
+        },
+        {
+          "left_field": "o.profile",
+          "right_field": "opr.profile"
+        },
+        {
+          "left_field": "o.version",
+          "right_field": "opr.version"
+        }
+      ]
+    },
+    {
+      "left_alias": "c",
+      "right_alias": "p",
+      "join_type": "Left",
+      "conditions": [
+        {
+          "left_field": "c.partner_id",
+          "right_field": "p.id"
+        },
+        {
+          "left_field": "c.profile",
+          "right_field": "p.profile"
+        }
+      ]
+    }
+  ],
+  "projections": [
+    {
+      "field": "partnership_id",
+      "expression": "p.id",
+      "alias": null
+    },
+    {
+      "field": "campaign_id",
+      "expression": "c.id",
+      "alias": null
+    },
+    {
+      "field": "campaign_name",
+      "expression": "c.name",
+      "alias": null
+    },
+    {
+      "field": "offer_id",
+      "expression": "o.id",
+      "alias": null
+    },
+    {
+      "field": "offer_name",
+      "expression": "o.name",
+      "alias": null
+    },
+    {
+      "field": "expired_or_live_status",
+      "expression": "CASE WHEN o.end_date::date < CURRENT_DATE THEN 'EXPIRED' ELSE o.status END",
+      "alias": null
+    },
+    {
+      "field": "workflow_status",
+      "expression": "o.status",
+      "alias": null
+    },
+    {
+      "field": "countries",
+      "expression": "o.countries",
+      "alias": null
+    },
+    {
+      "field": "products_csv",
+      "expression": "STRING_AGG(DISTINCT opr.product_id, ',')",
+      "alias": null
+    },
+    {
+      "field": "package_id",
+      "expression": "o.attributes ->> 'packageId'",
+      "alias": null
+    }
+  ],
+  "filters": [
+    {
+      "expression": "promo_type = 'PREPAID'"
+    },
+    {
+      "expression": "o.countries && ARRAY['KR', 'JP', 'TW', 'SG', 'HK']"
+    },
+    {
+      "expression": "o.status IN ('PUBLISHED', 'EXPIRED')"
+    }
+  ],
+  "order_by": [
+    {
+      "expression": "p.id",
+      "direction": "Asc"
+    },
+    {
+      "expression": "c.id",
+      "direction": "Asc"
+    },
+    {
+      "expression": "o.id",
+      "direction": "Asc"
+    }
+  ]
+}

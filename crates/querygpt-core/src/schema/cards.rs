@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use indexmap::IndexMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaCards {

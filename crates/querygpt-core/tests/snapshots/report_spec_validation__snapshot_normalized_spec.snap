@@ -1,6 +1,5 @@
 ---
 source: crates/querygpt-core/tests/report_spec_validation.rs
-assertion_line: 54
 expression: normalized
 ---
 {

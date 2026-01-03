@@ -1,6 +1,7 @@
 use querygpt_core::dsl::compile::compile_report_spec;
 
 mod common;
+
 use crate::common::{load_fixture, load_schema_registry};
 
 

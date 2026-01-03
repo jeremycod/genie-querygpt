@@ -13,6 +13,7 @@ tracing = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 indexmap = { version = "2", features = ["serde"] }
 regex = "1"
+serde_yaml = "0.9.34"
 
 [dev-dependencies]
 insta = { version = "1", features = ["json"] }
