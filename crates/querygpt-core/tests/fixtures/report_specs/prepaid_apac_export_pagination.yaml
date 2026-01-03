@@ -1,0 +1,20 @@
+version: 1
+workspace: "genie_prod"
+mode: "export"
+
+select:
+  - field: "offer_id"
+    alias: "offerId"
+  - field: "product"
+    alias: "product"
+  - field: "campaign"
+    alias: "associatedCampaign"
+  - field: "countries"
+    alias: "countries"
+
+filters: []
+order_by: []
+
+pagination:
+  limit: 100
+  offset: 200
