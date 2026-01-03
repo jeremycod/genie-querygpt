@@ -16,6 +16,33 @@ use crate::dsl::report_spec::SelectItem;
 use crate::dsl::plan::{PlanOrder, SortDirection};
 use crate::dsl::report_spec::{OrderBy, SortDir};
 
+fn field_alias(field: &str) -> Option<&str> {
+    field.split('.').next()
+}
+
+fn normalize_join_condition_for_aliases(
+    left_alias: &str,
+    right_alias: &str,
+    mut c: JoinCondition,
+) -> Result<JoinCondition> {
+    let a = field_alias(&c.left_field);
+    let b = field_alias(&c.right_field);
+
+    match (a, b) {
+        (Some(a1), Some(b1)) if a1 == left_alias && b1 == right_alias => Ok(c),
+        (Some(a1), Some(b1)) if a1 == right_alias && b1 == left_alias => {
+            std::mem::swap(&mut c.left_field, &mut c.right_field);
+            Ok(c)
+        }
+        _ => Err(anyhow!(
+            "cannot normalize join condition: {} = {} for join {} -> {}",
+            c.left_field,
+            c.right_field,
+            left_alias,
+            right_alias
+        )),
+    }
+}
 
 /// Translate a single field name into its SQL expression, reusing the same logic as in projections.
 /// Uses the alias_map to prefix columns and derives JSON paths where needed.
@@ -300,36 +327,86 @@ fn resolve_entity<'a>(field: &str, cards: &'a SchemaCards) -> Option<&'a str> {
     // Not found
     None
 }
-fn build_joins(cards: &SchemaCards, required: Vec<&Option<&str>>, alias_map: &HashMap<String, String>) -> Vec<PlanJoin> {
-    let required_names: Vec<&str> = required.iter().filter_map(|opt| opt.as_ref()).copied().collect();
-    
-    cards.join_graph.edges.iter()
-        .filter(|edge| required_names.contains(&edge.from.as_str()) && required_names.contains(&edge.to.as_str()))
-        .map(|edge| {
-            let conditions = edge.on.iter()
-                .filter_map(|expr| expr.split_once('='))
-                .map(|(left, right)| {
-                    let (left_tbl, left_col) = left.trim().split_once('.').unwrap();
-                    let (right_tbl, right_col) = right.trim().split_once('.').unwrap();
-                    JoinCondition {
-                        left_field: format!("{}.{}", alias_map.get(left_tbl).unwrap_or(&left_tbl.to_string()), left_col),
-                        right_field: format!("{}.{}", alias_map.get(right_tbl).unwrap_or(&right_tbl.to_string()), right_col),
-                    }
+fn build_joins(
+    cards: &SchemaCards,
+    required: Vec<&Option<&str>>,
+    alias_map: &HashMap<String, String>,
+) -> Result<Vec<PlanJoin>> {
+    let required_names: Vec<&str> = required
+        .iter()
+        .filter_map(|opt| opt.as_ref())
+        .copied()
+        .collect();
+
+    cards
+        .join_graph
+        .edges
+        .iter()
+        .filter(|edge| {
+            required_names.contains(&edge.from.as_str()) && required_names.contains(&edge.to.as_str())
+        })
+        .map(|edge| -> Result<PlanJoin> {
+            let left_alias = alias_map
+                .get(&edge.from)
+                .ok_or_else(|| anyhow!("missing alias_map entry for join edge.from '{}'", edge.from))?
+                .clone();
+
+            let right_alias = alias_map
+                .get(&edge.to)
+                .ok_or_else(|| anyhow!("missing alias_map entry for join edge.to '{}'", edge.to))?
+                .clone();
+
+            let conditions = edge
+                .on
+                .iter()
+                .map(|expr| -> Result<JoinCondition> {
+                    let (left, right) = expr
+                        .split_once('=')
+                        .ok_or_else(|| anyhow!("invalid join expression (missing '='): '{}'", expr))?;
+
+                    let (left_tbl, left_col) = left
+                        .trim()
+                        .split_once('.')
+                        .ok_or_else(|| anyhow!("invalid join LHS (expected tbl.col): '{}'", left.trim()))?;
+
+                    let (right_tbl, right_col) = right
+                        .trim()
+                        .split_once('.')
+                        .ok_or_else(|| anyhow!("invalid join RHS (expected tbl.col): '{}'", right.trim()))?;
+
+                    // Apply alias_map so the condition uses the plan aliases ("o.id", "oph.offer_id", etc.)
+                    let left_prefix = alias_map
+                        .get(left_tbl)
+                        .cloned()
+                        .unwrap_or_else(|| left_tbl.to_string());
+                    let right_prefix = alias_map
+                        .get(right_tbl)
+                        .cloned()
+                        .unwrap_or_else(|| right_tbl.to_string());
+
+                    let c = JoinCondition {
+                        left_field: format!("{}.{}", left_prefix, left_col),
+                        right_field: format!("{}.{}", right_prefix, right_col),
+                    };
+
+                    // ✅ Normalize so condition is always (left_alias.*) = (right_alias.*)
+                    normalize_join_condition_for_aliases(&left_alias, &right_alias, c)
                 })
-                .collect();
-            
-            PlanJoin {
-                left_alias: alias_map.get(&edge.from).unwrap().clone(),
-                right_alias: alias_map.get(&edge.to).unwrap().clone(),
+                .collect::<Result<Vec<_>>>()?;
+
+            Ok(PlanJoin {
+                left_alias,
+                right_alias,
                 join_type: match edge.join_type.as_str() {
                     "left" => JoinType::Left,
                     _ => JoinType::Inner,
                 },
                 conditions,
-            }
+            })
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()
 }
+
 /// Stub: compile DSL into an intermediate plan (tables, joins, selected fields, predicates).
 /// In production, this becomes the deterministic backbone that the LLM must follow.
 pub fn compile_report_spec(reg: &SchemaRegistry, spec: &ReportSpec) -> anyhow::Result<IntermediatePlan> {
@@ -366,7 +443,7 @@ pub fn compile_report_spec(reg: &SchemaRegistry, spec: &ReportSpec) -> anyhow::R
         })
     }).collect::<Vec<_>>();
     let alias_map: HashMap<String, String> = tables.iter().map(|t| (t.name.clone(), t.alias.clone())).collect();
-    let joins = build_joins(&reg.cards, required_entities, &alias_map);
+    let joins = build_joins(&reg.cards, required_entities, &alias_map)?;
     let projections = translate_projections(&spec.select, &alias_map, &reg.cards)?;
     let filters = translate_filters(&spec.filters, &alias_map, &reg.cards)?;
     let order_by = translate_ordering(&spec.order_by, &alias_map, &reg.cards)?;

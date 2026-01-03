@@ -77,16 +77,16 @@ expression: plan
       "join_type": "Inner",
       "conditions": [
         {
-          "left_field": "oph.offer_id",
-          "right_field": "o.id"
+          "left_field": "o.id",
+          "right_field": "oph.offer_id"
         },
         {
-          "left_field": "oph.profile",
-          "right_field": "o.profile"
+          "left_field": "o.profile",
+          "right_field": "oph.profile"
         },
         {
-          "left_field": "oph.version",
-          "right_field": "o.version"
+          "left_field": "o.version",
+          "right_field": "oph.version"
         }
       ]
     },
@@ -96,16 +96,16 @@ expression: plan
       "join_type": "Inner",
       "conditions": [
         {
-          "left_field": "opr.offer_id",
-          "right_field": "o.id"
+          "left_field": "o.id",
+          "right_field": "opr.offer_id"
         },
         {
-          "left_field": "opr.profile",
-          "right_field": "o.profile"
+          "left_field": "o.profile",
+          "right_field": "opr.profile"
         },
         {
-          "left_field": "opr.version",
-          "right_field": "o.version"
+          "left_field": "o.version",
+          "right_field": "opr.version"
         }
       ]
     },
@@ -115,12 +115,12 @@ expression: plan
       "join_type": "Left",
       "conditions": [
         {
-          "left_field": "p.id",
-          "right_field": "c.partner_id"
+          "left_field": "c.partner_id",
+          "right_field": "p.id"
         },
         {
-          "left_field": "p.profile",
-          "right_field": "c.profile"
+          "left_field": "c.profile",
+          "right_field": "p.profile"
         }
       ]
     }

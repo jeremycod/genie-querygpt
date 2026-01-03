@@ -1,44 +1,10 @@
 
 use std::collections::BTreeSet;
 use anyhow::{anyhow, Result};
-use crate::dsl::plan::{IntermediatePlan, PlanJoin, JoinType, SortDirection, JoinCondition};
+use crate::dsl::plan::{IntermediatePlan, PlanJoin, JoinType, SortDirection};
 
 
 
-fn field_alias(field: &str) -> Option<&str> {
-    field.split('.').next()
-}
-
-fn normalize_join(j: &PlanJoin) -> Result<PlanJoin> {
-    let left = j.left_alias.as_str();
-    let right = j.right_alias.as_str();
-
-    let norm_conditions: Result<Vec<JoinCondition>> = j
-        .conditions
-        .iter()
-        .map(|c| {
-            let a = field_alias(&c.left_field);
-            let b = field_alias(&c.right_field);
-
-            match (a, b) {
-                (Some(a1), Some(b1)) if a1 == left && b1 == right => Ok(c.clone()),
-                (Some(a1), Some(b1)) if a1 == right && b1 == left => Ok(JoinCondition {
-                    left_field: c.right_field.clone(),
-                    right_field: c.left_field.clone(),
-                }),
-                _ => Err(anyhow!(
-                    "cannot normalize join condition: {} = {} for join {} -> {}",
-                    c.left_field, c.right_field, left, right
-                )),
-            }
-        })
-        .collect();
-
-    Ok(PlanJoin {
-        conditions: norm_conditions?,
-        ..j.clone()
-    })
-}
 
 fn render_order_by(plan: &IntermediatePlan) -> String {
     if plan.order_by.is_empty() {
@@ -186,12 +152,7 @@ fn order_joins(plan: &IntermediatePlan, root: &str) -> Result<Vec<PlanJoin>> {
         step(visited2, not_ready, acc2)
     }
 
-    let remaining = sorted_joins(
-        plan.joins
-            .iter()
-            .map(normalize_join)
-            .collect::<Result<Vec<_>>>()?
-    );
+    let remaining = sorted_joins(plan.joins.clone());
     
     let visited: BTreeSet<String> = [root.to_string()].into_iter().collect();
 
@@ -219,14 +180,15 @@ fn render_sql_inner(plan: &IntermediatePlan) -> Result<String> {
     };
 
     // FROM (deterministic + valid)
-    let root_alias = choose_root_alias(plan).unwrap();
-    let root_table = plan.tables.iter().find(|t| t.alias == root_alias).unwrap();
+    let root_alias = choose_root_alias(plan)?;
+    let root_table = plan.tables.iter().find(|t| t.alias == root_alias)
+        .ok_or_else(|| anyhow!("root alias '{}' not found in plan.tables", root_alias))?;
     let from_clause = format!("FROM {} {}", root_table.name, root_table.alias);
 
     // JOINs (deterministic + valid)
     let join_sql = order_joins(plan, &root_alias)?
         .iter()
-        .map(|j| {
+        .map(|j| -> Result<String> {
             let join_type = match j.join_type {
                 JoinType::Inner => "JOIN",
                 JoinType::Left => "LEFT JOIN",
@@ -238,23 +200,28 @@ fn render_sql_inner(plan: &IntermediatePlan) -> Result<String> {
                 .collect::<Vec<_>>()
                 .join(" AND ");
 
-            let right_table_name = plan.tables
+            let right_table_name = plan
+                .tables
                 .iter()
                 .find(|t| t.alias == j.right_alias)
-                .unwrap()
+                .ok_or_else(|| anyhow!(
+                "join right_alias '{}' not found in plan.tables",
+                j.right_alias
+            ))?
                 .name
                 .clone();
 
-            format!(
+            Ok(format!(
                 "{} {} {} ON {}",
                 join_type,
                 right_table_name,
                 j.right_alias,
                 on_clause
-            )
+            ))
         })
-        .collect::<Vec<_>>()
+        .collect::<Result<Vec<_>>>()?
         .join("\n");
+
 
     let where_clause = if plan.filters.is_empty() {
         "".to_string()

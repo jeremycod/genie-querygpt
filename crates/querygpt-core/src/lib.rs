@@ -7,3 +7,4 @@ pub mod validate;
 pub mod explain;
 pub mod policy;
 pub mod telemetry;
+mod compiler;
