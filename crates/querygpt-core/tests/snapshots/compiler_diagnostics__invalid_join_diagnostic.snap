@@ -1,0 +1,15 @@
+---
+source: crates/querygpt-core/tests/compiler_diagnostics.rs
+expression: diagnostics
+---
+{
+  "diagnostics": [
+    {
+      "code": "invalid_join",
+      "message": "invalid join: invalid join expression (missing '='): 'left.left_id right.right_id'",
+      "detail": {
+        "reason": "invalid join expression (missing '='): 'left.left_id right.right_id'"
+      }
+    }
+  ]
+}
