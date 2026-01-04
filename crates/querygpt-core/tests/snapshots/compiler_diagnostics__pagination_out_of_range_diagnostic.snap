@@ -1,0 +1,16 @@
+---
+source: crates/querygpt-core/tests/compiler_diagnostics.rs
+expression: diagnostics
+---
+{
+  "diagnostics": [
+    {
+      "code": "pagination_out_of_range",
+      "message": "pagination value for 'limit' must be non-negative",
+      "field": "limit",
+      "detail": {
+        "value": -5
+      }
+    }
+  ]
+}

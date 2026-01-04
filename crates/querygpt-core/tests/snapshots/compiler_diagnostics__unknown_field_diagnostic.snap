@@ -1,0 +1,14 @@
+---
+source: crates/querygpt-core/tests/compiler_diagnostics.rs
+expression: diagnostics
+---
+{
+  "diagnostics": [
+    {
+      "code": "unknown_field",
+      "message": "unknown field 'nonexistent_field' in select",
+      "field": "nonexistent_field",
+      "context": "select"
+    }
+  ]
+}
