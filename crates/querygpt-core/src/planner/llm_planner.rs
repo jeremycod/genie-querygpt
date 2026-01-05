@@ -171,12 +171,11 @@ impl Planner for LlmPlanner {
         ctx: PlannerContext,
         diagnostics: &CompilerDiagnostics,
     ) -> PlannerResult<ReportSpecDraft> {
-        // For revision, we need the previous spec - this is a limitation of current interface
-        // For now, we'll treat this as a fresh attempt with diagnostic context
+        // Build revision prompt with diagnostic context
         let system_prompt = format!(
             r#"You are a ReportSpec generator. The previous attempt failed compilation.
 
-COMPILER ERRORS: {:?}
+COMPILER ERRORS: {}
 
 CONSTRAINTS:
 - Output valid JSON matching the schema
@@ -185,17 +184,31 @@ CONSTRAINTS:
 - No SQL generation
 
 WORKSPACE: {}
-AVAILABLE_TABLES: {:?}
-AVAILABLE_FIELDS: {:?}
+AVAILABLE_TABLES: {}
+AVAILABLE_FIELDS: {}
 
-OUTPUT FORMAT:
+REQUIRED OUTPUT FORMAT:
 {{
-  "report_spec": {{ ... }},
-  "assumptions": ["..."],
-  "open_questions": ["..."],
-  "notes": "..."
-}}"#,
-            diagnostics, ctx.workspace, ctx.available_tables, ctx.available_fields
+  "report_spec": {{
+    "version": 1,
+    "workspace": "{}",
+    "select": [{{"field": "field_name", "alias": null}}],
+    "filters": [],
+    "order_by": [],
+    "mode": "preview",
+    "pagination": null
+  }},
+  "assumptions": ["list any assumptions made"],
+  "open_questions": ["list any unclear requirements"],
+  "notes": "explanation of fixes made"
+}}
+
+IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
+            format!("{:?}", diagnostics),
+            ctx.workspace,
+            ctx.available_tables.join(", "),
+            ctx.available_fields.join(", "),
+            ctx.workspace
         );
 
         let llm_output = self.make_llm_request(system_prompt, prompt.to_string())?;
