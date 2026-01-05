@@ -5,16 +5,18 @@ use crate::dsl::report_spec::ReportSpec;
 use crate::planner::planner::{NoopPlanner, Planner, PlannerContext, ReportSpecDraft};
 use crate::planner::diff::{diff_report_specs, SpecDiff};
 use crate::planner::confirmation::{UserConfirmation, AutoApproveConfirmation, ConfirmationResult};
+use crate::planner::trace::{PlannerTrace, CompilationStatus, FlowLogger};
 use crate::schema::registry::SchemaRegistry;
 
-/// Phase B Orchestration Result
+
 #[derive(Debug)]
 pub enum OrchestrationResult {
-    /// Compilation succeeded
+    /// Success with trace information
     Success {
         plan: IntermediatePlan,
         draft: Option<ReportSpecDraft>,
         diffs: Vec<SpecDiff>,
+        trace: Option<PlannerTrace>,
     },
     /// Compilation failed with diagnostics
     CompilationFailed {
@@ -72,6 +74,7 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
                 plan, 
                 draft: None,
                 diffs: vec![], // No changes in compile-only mode
+                trace: None, // No trace in compile-only mode
             },
             Err(diagnostics) => OrchestrationResult::CompilationFailed {
                 diagnostics,
@@ -88,10 +91,23 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
         prompt: &str,
         context: PlannerContext,
     ) -> OrchestrationResult {
+        // Initialize trace
+        let mut trace = PlannerTrace::new("unknown".to_string());
+        
+        // Log flow start
+        FlowLogger::prompt_received(prompt);
+        
         // Step 1: Get initial suggestion from planner
+        trace.increment_attempt();
+        FlowLogger::planner_suggest(trace.attempts);
+        
         let initial_draft = match self.planner.suggest_report_spec(prompt, context.clone()) {
             Ok(draft) => draft,
-            Err(error) => return OrchestrationResult::PlannerFailed { error },
+            Err(error) => {
+                trace.set_final_status(CompilationStatus::PlannerFailed);
+                FlowLogger::planner_failed(&error.to_string());
+                return OrchestrationResult::PlannerFailed { error };
+            }
         };
 
         // Step 2: Attempt compilation with retry loop
@@ -102,18 +118,26 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
             // Try compilation
             match compile_report_spec(registry, &current_draft.spec) {
                 Ok(plan) => {
+                    FlowLogger::compiler_result(true);
+                    
                     // Compilation succeeded - check for changes and get user confirmation
                     let diffs = diff_report_specs(&original_spec, &current_draft.spec);
                     
+                    FlowLogger::confirm_spec(true); // waiting for confirmation
                     match self.confirmation.confirm_changes(&diffs, attempt) {
                         ConfirmationResult::Approved => {
+                            FlowLogger::confirm_spec(false); // approved
+                            trace.set_final_status(CompilationStatus::Success);
                             return OrchestrationResult::Success {
                                 plan,
                                 draft: Some(current_draft),
                                 diffs,
+                                trace: Some(trace),
                             };
                         }
                         ConfirmationResult::Rejected => {
+                            FlowLogger::user_rejected();
+                            trace.set_final_status(CompilationStatus::UserRejected);
                             return OrchestrationResult::UserRejected {
                                 diffs,
                                 draft: current_draft,
@@ -121,6 +145,10 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
                         }
                         ConfirmationResult::RequestRevision(feedback) => {
                             // User wants revision - treat as compilation failure with custom feedback
+                            trace.mark_revision();
+                            trace.increment_attempt();
+                            FlowLogger::planner_revise(trace.attempts);
+                            
                             let user_feedback_prompt = format!("{} (User feedback: {})", prompt, feedback);
                             
                             // Create mock diagnostics for user feedback
@@ -145,6 +173,8 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
                                     continue; // Continue retry loop
                                 }
                                 Err(_) => {
+                                    trace.set_final_status(CompilationStatus::RetryLimitExceeded);
+                                    FlowLogger::retry_limit_exceeded(trace.attempts);
                                     return OrchestrationResult::RetryLimitExceeded {
                                         diagnostics: mock_diagnostics,
                                         draft: current_draft,
@@ -156,8 +186,15 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
                     }
                 }
                 Err(diagnostics) => {
+                    FlowLogger::compiler_result(false);
+                    FlowLogger::compiler_diagnostics(&diagnostics);
+                    
                     // Compilation failed - ask planner to revise
                     if attempt < self.max_retries {
+                        trace.mark_revision();
+                        trace.increment_attempt();
+                        FlowLogger::planner_revise(trace.attempts);
+                        
                         match self.planner.revise_report_spec(
                             prompt,
                             context.clone(),
@@ -169,6 +206,7 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
                             }
                             Err(_) => {
                                 // Planner can't revise, return compilation failure
+                                trace.set_final_status(CompilationStatus::Failed);
                                 return OrchestrationResult::CompilationFailed {
                                     diagnostics,
                                     draft: Some(current_draft),
@@ -177,6 +215,8 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
                         }
                     } else {
                         // Max retries exceeded
+                        trace.set_final_status(CompilationStatus::RetryLimitExceeded);
+                        FlowLogger::retry_limit_exceeded(trace.attempts);
                         return OrchestrationResult::RetryLimitExceeded {
                             diagnostics,
                             draft: current_draft,
@@ -231,9 +271,10 @@ mod tests {
         let result = compile_only(&registry, &spec);
         
         match result {
-            OrchestrationResult::Success { plan, draft, diffs } => {
+            OrchestrationResult::Success { plan, draft, diffs, trace } => {
                 assert!(draft.is_none()); // No draft in compile-only mode
                 assert!(diffs.is_empty()); // No diffs in compile-only mode
+                assert!(trace.is_none()); // No trace in compile-only mode
                 assert_eq!(plan.workspace, "campaigns_offers");
                 assert!(!plan.projections.is_empty());
             }

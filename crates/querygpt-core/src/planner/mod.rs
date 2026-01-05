@@ -10,6 +10,7 @@ pub mod mock_client;
 pub mod prompt_templates;
 pub mod openai_client;
 pub mod schema_summary;
+pub mod trace;
 
 #[cfg(test)]
 mod llm_planner_tests;
