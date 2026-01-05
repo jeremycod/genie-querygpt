@@ -246,7 +246,14 @@ mod tests {
     use crate::schema::registry::SchemaRegistry;
 
     fn load_test_registry() -> SchemaRegistry {
-        SchemaRegistry::load("../../config/workspaces/campaigns_offers.index.json")
+        // Use absolute path to avoid working directory issues with concurrent tests
+        let crate_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = crate_root
+            .parent().and_then(|p| p.parent())
+            .expect("resolve repo root from CARGO_MANIFEST_DIR");
+        let index_path = repo_root.join("config/workspaces/campaigns_offers.index.json");
+        
+        SchemaRegistry::load(index_path.to_str().unwrap())
             .expect("load test schema registry")
     }
 

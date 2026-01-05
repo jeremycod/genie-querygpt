@@ -9,6 +9,18 @@ pub fn load_fixture(name: &str) -> ReportSpec {
 }
 
 pub fn load_schema_registry(name: &str) -> SchemaRegistry {
-    let path = format!("../../config/workspaces/{}", name);
-    SchemaRegistry::load(&path).expect("load schema registry")
+    // Change to repo root directory for schema loading
+    let crate_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = crate_root
+        .parent().and_then(|p| p.parent())
+        .expect("resolve repo root from CARGO_MANIFEST_DIR");
+    
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&repo_root).expect("change to repo root");
+    
+    let path = format!("config/workspaces/{}", name);
+    let result = SchemaRegistry::load(&path).expect("load schema registry");
+    
+    std::env::set_current_dir(original_dir).expect("restore original directory");
+    result
 }
