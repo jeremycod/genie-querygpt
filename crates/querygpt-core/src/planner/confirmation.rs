@@ -1,4 +1,5 @@
 use crate::planner::diff::{SpecDiff, format_diff_display};
+use std::io::{self, Write};
 
 /// User confirmation result
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,6 +12,52 @@ pub enum ConfirmationResult {
 /// Trait for user confirmation interface
 pub trait UserConfirmation {
     fn confirm_changes(&self, diffs: &[SpecDiff], attempt: usize) -> ConfirmationResult;
+}
+
+/// Interactive console confirmation - prompts user for input
+#[derive(Debug, Default)]
+pub struct InteractiveConfirmation;
+
+impl UserConfirmation for InteractiveConfirmation {
+    fn confirm_changes(&self, diffs: &[SpecDiff], attempt: usize) -> ConfirmationResult {
+        if diffs.is_empty() {
+            return ConfirmationResult::Approved;
+        }
+        
+        println!("{}", format_confirmation_prompt(diffs, attempt));
+        
+        loop {
+            print!("Your choice [A/R/M]: ");
+            io::stdout().flush().unwrap();
+            
+            let mut input = String::new();
+            match io::stdin().read_line(&mut input) {
+                Ok(_) => {
+                    let choice = input.trim().to_lowercase();
+                    match choice.as_str() {
+                        "a" | "approve" => return ConfirmationResult::Approved,
+                        "r" | "reject" => return ConfirmationResult::Rejected,
+                        "m" | "modify" => {
+                            print!("Enter modification request: ");
+                            io::stdout().flush().unwrap();
+                            let mut feedback = String::new();
+                            if io::stdin().read_line(&mut feedback).is_ok() {
+                                return ConfirmationResult::RequestRevision(feedback.trim().to_string());
+                            }
+                        }
+                        _ => {
+                            println!("Invalid choice. Please enter A, R, or M.");
+                            continue;
+                        }
+                    }
+                }
+                Err(_) => {
+                    println!("Error reading input. Defaulting to reject.");
+                    return ConfirmationResult::Rejected;
+                }
+            }
+        }
+    }
 }
 
 /// Mock confirmation for testing - always approves
