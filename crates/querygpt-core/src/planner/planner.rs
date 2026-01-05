@@ -5,14 +5,15 @@ use serde::{Deserialize, Serialize};
 
 /// Phase B Planner Interface - Strict boundary for AI behavior
 /// AI output is treated as untrusted and must go through compiler
+#[async_trait::async_trait]
 pub trait Planner {
-    fn suggest_report_spec(
+    async fn suggest_report_spec(
         &self,
         prompt: &str,
         ctx: PlannerContext,
     ) -> PlannerResult<ReportSpecDraft>;
 
-    fn revise_report_spec(
+    async fn revise_report_spec(
         &self,
         prompt: &str,
         ctx: PlannerContext,
@@ -99,8 +100,9 @@ pub enum PlannerError {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NoopPlanner;
 
+#[async_trait::async_trait]
 impl Planner for NoopPlanner {
-    fn suggest_report_spec(
+    async fn suggest_report_spec(
         &self,
         _prompt: &str,
         _ctx: PlannerContext,
@@ -108,7 +110,7 @@ impl Planner for NoopPlanner {
         Err(PlannerError::Unimplemented)
     }
 
-    fn revise_report_spec(
+    async fn revise_report_spec(
         &self,
         _prompt: &str,
         _ctx: PlannerContext,
@@ -122,8 +124,9 @@ impl Planner for NoopPlanner {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct StubPlanner;
 
+#[async_trait::async_trait]
 impl Planner for StubPlanner {
-    fn suggest_report_spec(
+    async fn suggest_report_spec(
         &self,
         _prompt: &str,
         _ctx: PlannerContext,
@@ -131,7 +134,7 @@ impl Planner for StubPlanner {
         Err(PlannerError::Unimplemented)
     }
 
-    fn revise_report_spec(
+    async fn revise_report_spec(
         &self,
         _prompt: &str,
         _ctx: PlannerContext,

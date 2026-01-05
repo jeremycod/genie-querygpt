@@ -1,7 +1,7 @@
 use crate::compile::diagnostics::CompilerDiagnostics;
 use crate::dsl::report_spec::ReportSpec;
 use super::planner::PlannerContext;
-use super::schema_summary::{SchemaSummary, TableSummary, FieldSummary};
+use super::schema_summary::{SchemaSummary};
 
 /// Prompt template builder for LLM interactions
 pub struct PromptTemplates;

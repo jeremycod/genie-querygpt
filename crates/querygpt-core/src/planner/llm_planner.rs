@@ -124,7 +124,7 @@ impl LlmPlanner {
     }
 
     /// Make LLM request and parse response
-    fn make_llm_request(&self, system_prompt: String, user_prompt: String) -> Result<LlmOutput, PlannerError> {
+    async fn make_llm_request(&self, system_prompt: String, user_prompt: String) -> Result<LlmOutput, PlannerError> {
         let request = LlmRequest {
             messages: vec![
                 LlmMessage {
@@ -141,7 +141,7 @@ impl LlmPlanner {
             max_tokens: Some(2048),
         };
 
-        let response = self.client.complete(request)
+        let response = self.client.complete(request).await
             .map_err(|e| PlannerError::InternalError(format!("LLM client error: {}", e)))?;
 
         self.parse_llm_output(&response.content)
@@ -149,14 +149,15 @@ impl LlmPlanner {
     }
 }
 
+#[async_trait::async_trait]
 impl Planner for LlmPlanner {
-    fn suggest_report_spec(
+    async fn suggest_report_spec(
         &self,
         prompt: &str,
         ctx: PlannerContext,
     ) -> PlannerResult<ReportSpecDraft> {
         let system_prompt = self.build_system_prompt(&ctx);
-        let llm_output = self.make_llm_request(system_prompt, prompt.to_string())?;
+        let llm_output = self.make_llm_request(system_prompt, prompt.to_string()).await?;
 
         Ok(ReportSpecDraft {
             spec: llm_output.report_spec,
@@ -165,7 +166,7 @@ impl Planner for LlmPlanner {
         })
     }
 
-    fn revise_report_spec(
+    async fn revise_report_spec(
         &self,
         prompt: &str,
         ctx: PlannerContext,
@@ -211,7 +212,7 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
             ctx.workspace
         );
 
-        let llm_output = self.make_llm_request(system_prompt, prompt.to_string())?;
+        let llm_output = self.make_llm_request(system_prompt, prompt.to_string()).await?;
 
         Ok(ReportSpecDraft {
             spec: llm_output.report_spec,
