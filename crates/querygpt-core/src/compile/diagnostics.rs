@@ -40,19 +40,143 @@ pub enum CompilerError {
     SchemaMismatch { expected: String, found: String },
 }
 
+/// Phase B Diagnostic Codes - Stable and versioned
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticCode {
     UnknownField,
+    UnknownTable,
     InvalidJoin,
-    PaginationOutOfRange,
+    AmbiguousJoin,
+    InvalidPagination,
     SchemaMismatch,
+    InvalidFilterValue,
     InvalidProjection,
     InvalidFilter,
     InvalidOrderBy,
     WorkspaceNotFound,
 }
 
+/// JSON Pointer span for precise error location
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct Span {
+    pub pointer: String, // JSON Pointer into ReportSpec
+}
+
+/// Phase B Structured Diagnostic - Machine-readable, stable, snapshot-tested
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct Diagnostic {
+    pub code: DiagnosticCode,
+    pub message: String,
+    pub spans: Vec<Span>,
+    pub details: serde_json::Value,
+    pub help: Vec<String>,
+}
+
+/// Phase B Compiler Diagnostics - Container for all diagnostics
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CompilerDiagnostics {
+    pub errors: Vec<Diagnostic>,
+    pub warnings: Vec<Diagnostic>,
+}
+
+impl CompilerDiagnostics {
+    pub fn new() -> Self {
+        Self {
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+
+    pub fn error(diagnostic: Diagnostic) -> Self {
+        Self {
+            errors: vec![diagnostic],
+            warnings: Vec::new(),
+        }
+    }
+
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+
+    /// Create unknown field diagnostic
+    pub fn unknown_field(field: String, context: &'static str) -> Self {
+        Self::error(Diagnostic {
+            code: DiagnosticCode::UnknownField,
+            message: format!("unknown field '{field}' in {context}"),
+            spans: vec![Span {
+                pointer: format!("/{context}/{}", field.replace('.', "/")),
+            }],
+            details: serde_json::json!({
+                "field": field,
+                "context": context
+            }),
+            help: vec![
+                "Check available fields in the schema".to_string(),
+                "Verify field name spelling".to_string(),
+            ],
+        })
+    }
+
+    /// Create schema mismatch diagnostic
+    pub fn schema_mismatch(expected: String, found: String) -> Self {
+        Self::error(Diagnostic {
+            code: DiagnosticCode::SchemaMismatch,
+            message: format!(
+                "schema registry workspace '{expected}' does not match spec workspace '{found}'"
+            ),
+            spans: vec![Span {
+                pointer: "/workspace".to_string(),
+            }],
+            details: serde_json::json!({
+                "expected": expected,
+                "found": found
+            }),
+            help: vec![
+                format!("Change workspace to '{expected}'"),
+                "Verify the correct schema registry is loaded".to_string(),
+            ],
+        })
+    }
+
+    /// Create invalid join diagnostic
+    pub fn invalid_join(reason: impl Into<String>) -> Self {
+        let reason = reason.into();
+        Self::error(Diagnostic {
+            code: DiagnosticCode::InvalidJoin,
+            message: format!("invalid join: {reason}"),
+            spans: vec![], // TODO: Add specific spans when we have join location info
+            details: serde_json::json!({
+                "reason": reason
+            }),
+            help: vec![
+                "Check that all referenced tables exist".to_string(),
+                "Verify join conditions are valid".to_string(),
+            ],
+        })
+    }
+
+    /// Create pagination out of range diagnostic
+    pub fn pagination_out_of_range(field: &'static str, value: i64) -> Self {
+        Self::error(Diagnostic {
+            code: DiagnosticCode::InvalidPagination,
+            message: format!("pagination value for '{field}' must be non-negative"),
+            spans: vec![Span {
+                pointer: format!("/pagination/{field}"),
+            }],
+            details: serde_json::json!({
+                "field": field,
+                "value": value
+            }),
+            help: vec![
+                format!("Set {field} to a non-negative value"),
+                "Remove the pagination field if not needed".to_string(),
+            ],
+        })
+    }
+}
+
+/// Legacy diagnostics for backward compatibility during transition
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CompilerDiagnostic {
     pub code: DiagnosticCode,
@@ -65,6 +189,7 @@ pub struct CompilerDiagnostic {
     pub detail: Option<serde_json::Value>,
 }
 
+/// Legacy diagnostics container for backward compatibility
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CompileDiagnostics {
     pub diagnostics: Vec<CompilerDiagnostic>,
@@ -102,7 +227,7 @@ impl CompileDiagnostics {
 
     pub fn pagination_out_of_range(field: &'static str, value: i64) -> Self {
         Self::single(CompilerDiagnostic {
-            code: DiagnosticCode::PaginationOutOfRange,
+            code: DiagnosticCode::InvalidPagination,
             message: format!("pagination value for '{field}' must be non-negative"),
             field: Some(field.to_string()),
             context: None,
@@ -151,6 +276,7 @@ impl CompileDiagnostics {
     }
 }
 
+// Conversion implementations for backward compatibility
 impl From<CompileError> for CompileDiagnostics {
     fn from(value: CompileError) -> Self {
         match value {
@@ -201,6 +327,7 @@ impl From<SpecError> for CompileDiagnostics {
         }
     }
 }
+
 impl From<CompilerError> for CompileDiagnostics {
     fn from(value: CompilerError) -> Self {
         match value {
@@ -225,6 +352,98 @@ impl From<CompilerError> for CompileDiagnostics {
                 field.clone(),
                 format!("invalid ordering on field '{field}'"),
             ),
+        }
+    }
+}
+
+// Conversion from legacy to new diagnostics
+impl From<CompileDiagnostics> for CompilerDiagnostics {
+    fn from(legacy: CompileDiagnostics) -> Self {
+        let errors = legacy.diagnostics.into_iter().map(|d| Diagnostic {
+            code: d.code,
+            message: d.message,
+            spans: if let Some(field) = &d.field {
+                vec![Span {
+                    pointer: format!("/{}/{}", d.context.as_deref().unwrap_or("unknown"), field),
+                }]
+            } else {
+                vec![]
+            },
+            details: d.detail.unwrap_or(serde_json::Value::Null),
+            help: vec![], // Legacy diagnostics don't have help
+        }).collect();
+        
+        Self {
+            errors,
+            warnings: vec![],
+        }
+    }
+}
+
+// Conversion from CompilerError to new CompilerDiagnostics
+impl From<CompilerError> for CompilerDiagnostics {
+    fn from(value: CompilerError) -> Self {
+        match value {
+            CompilerError::Spec(e) => {
+                // Convert SpecError to legacy first, then to new
+                let legacy = CompileDiagnostics::from(e);
+                CompilerDiagnostics::from(legacy)
+            }
+            CompilerError::Pagination(e) => {
+                let legacy = CompileDiagnostics::from(e);
+                CompilerDiagnostics::from(legacy)
+            }
+            CompilerError::SchemaMismatch { expected, found } => {
+                CompilerDiagnostics::schema_mismatch(expected, found)
+            }
+            CompilerError::InvalidJoin { reason } => {
+                CompilerDiagnostics::invalid_join(reason)
+            }
+            CompilerError::UnknownField { field, context } => {
+                CompilerDiagnostics::unknown_field(field, context)
+            }
+            CompilerError::InvalidProjection { field } => {
+                CompilerDiagnostics::error(Diagnostic {
+                    code: DiagnosticCode::InvalidProjection,
+                    message: format!("invalid projection for field '{field}'"),
+                    spans: vec![Span {
+                        pointer: format!("/select/{}", field.replace('.', "/")),
+                    }],
+                    details: serde_json::json!({ "field": field }),
+                    help: vec![
+                        "Check that the field is selectable".to_string(),
+                        "Verify field exists in the schema".to_string(),
+                    ],
+                })
+            }
+            CompilerError::InvalidFilter { field } => {
+                CompilerDiagnostics::error(Diagnostic {
+                    code: DiagnosticCode::InvalidFilter,
+                    message: format!("invalid filter on field '{field}'"),
+                    spans: vec![Span {
+                        pointer: format!("/filters/{}", field.replace('.', "/")),
+                    }],
+                    details: serde_json::json!({ "field": field }),
+                    help: vec![
+                        "Check that the field is filterable".to_string(),
+                        "Verify the filter operator is valid for this field type".to_string(),
+                    ],
+                })
+            }
+            CompilerError::InvalidOrderBy { field } => {
+                CompilerDiagnostics::error(Diagnostic {
+                    code: DiagnosticCode::InvalidOrderBy,
+                    message: format!("invalid ordering on field '{field}'"),
+                    spans: vec![Span {
+                        pointer: format!("/order_by/{}", field.replace('.', "/")),
+                    }],
+                    details: serde_json::json!({ "field": field }),
+                    help: vec![
+                        "Check that the field is sortable".to_string(),
+                        "Verify field exists in the schema".to_string(),
+                    ],
+                })
+            }
         }
     }
 }

@@ -3,14 +3,24 @@ source: crates/querygpt-core/tests/compiler_diagnostics.rs
 expression: diagnostics
 ---
 {
-  "diagnostics": [
+  "errors": [
     {
       "code": "schema_mismatch",
       "message": "schema registry workspace 'campaigns_offers' does not match spec workspace 'another_workspace'",
-      "detail": {
+      "spans": [
+        {
+          "pointer": "/workspace"
+        }
+      ],
+      "details": {
         "expected": "campaigns_offers",
         "found": "another_workspace"
-      }
+      },
+      "help": [
+        "Change workspace to 'campaigns_offers'",
+        "Verify the correct schema registry is loaded"
+      ]
     }
-  ]
+  ],
+  "warnings": []
 }

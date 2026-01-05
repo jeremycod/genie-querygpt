@@ -4,7 +4,7 @@ use crate::schema::cards::SchemaCards;
 use crate::schema::registry::SchemaRegistry;
 use std::collections::HashMap;
 
-use crate::compile::diagnostics::{CompileDiagnostics, CompileError, CompilerError};
+use crate::compile::diagnostics::{CompilerDiagnostics, CompileError, CompilerError};
 use crate::dsl::plan::PlanFilter;
 use crate::dsl::report_spec::{Filter, FilterOp};
 use anyhow::Result;
@@ -522,8 +522,8 @@ fn build_joins(
 pub fn compile_report_spec(
     reg: &SchemaRegistry,
     spec: &ReportSpec,
-) -> Result<IntermediatePlan, CompileDiagnostics> {
-    compile_report_spec_internal(reg, spec).map_err(CompileDiagnostics::from)
+) -> Result<IntermediatePlan, CompilerDiagnostics> {
+    compile_report_spec_internal(reg, spec).map_err(CompilerDiagnostics::from)
 }
 
 fn compile_report_spec_internal(
