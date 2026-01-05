@@ -1,5 +1,6 @@
 use super::llm::{LlmClient, LlmRequest, LlmMessage, LlmRole, LlmOutput, LlmError};
 use super::planner::{Planner, PlannerContext, PlannerResult, PlannerError, ReportSpecDraft};
+use super::prompt_templates::PromptTemplates;
 use crate::compile::diagnostics::CompilerDiagnostics;
 
 /// LLM-powered planner that generates ReportSpecs from natural language
@@ -24,47 +25,90 @@ impl LlmPlanner {
     }
 
     /// Parse LLM output following strict JSON contract
+    /// Gate A: JSON Parse + Strict Deserialization
     fn parse_llm_output(&self, raw: &str) -> Result<LlmOutput, LlmError> {
-        // Gate A: JSON Parse + Strict Deserialization
-        let parsed: serde_json::Value = serde_json::from_str(raw)
-            .map_err(|e| LlmError::JsonParseError(e.to_string()))?;
-
-        // Validate required fields exist
-        if !parsed.get("report_spec").is_some() {
-            return Err(LlmError::MissingField("report_spec".to_string()));
-        }
-
-        // Deserialize to structured output
+        // Step 1: Clean the raw output (remove any non-JSON content)
+        let cleaned = self.extract_json_from_response(raw)?;
+        
+        // Step 2: Parse as JSON
+        let parsed: serde_json::Value = serde_json::from_str(&cleaned)
+            .map_err(|e| LlmError::JsonParseError(format!("Invalid JSON: {}", e)))?;
+        
+        // Step 3: Validate required fields exist
+        self.validate_required_fields(&parsed)?;
+        
+        // Step 4: Deserialize to structured output
         let output: LlmOutput = serde_json::from_value(parsed)
-            .map_err(|e| LlmError::InvalidFormat(e.to_string()))?;
-
+            .map_err(|e| LlmError::InvalidFormat(format!("Deserialization failed: {}", e)))?;
+        
+        // Step 5: Validate ReportSpec structure
+        self.validate_report_spec(&output.report_spec)?;
+        
         Ok(output)
+    }
+    
+    /// Extract JSON from potentially mixed response content
+    fn extract_json_from_response(&self, raw: &str) -> Result<String, LlmError> {
+        let trimmed = raw.trim();
+        
+        // If it starts with {, assume it's pure JSON
+        if trimmed.starts_with('{') {
+            return Ok(trimmed.to_string());
+        }
+        
+        // Try to find JSON block in response
+        if let Some(start) = trimmed.find('{') {
+            if let Some(end) = trimmed.rfind('}') {
+                if end > start {
+                    return Ok(trimmed[start..=end].to_string());
+                }
+            }
+        }
+        
+        Err(LlmError::InvalidFormat("No valid JSON found in response".to_string()))
+    }
+    
+    /// Validate that all required fields are present
+    fn validate_required_fields(&self, parsed: &serde_json::Value) -> Result<(), LlmError> {
+        let required_fields = ["report_spec", "assumptions", "open_questions"];
+        
+        for field in &required_fields {
+            if !parsed.get(field).is_some() {
+                return Err(LlmError::MissingField(field.to_string()));
+            }
+        }
+        
+        // Validate report_spec has required structure
+        let report_spec = parsed.get("report_spec").unwrap();
+        let spec_required = ["version", "workspace", "select", "filters", "order_by", "mode"];
+        
+        for field in &spec_required {
+            if !report_spec.get(field).is_some() {
+                return Err(LlmError::MissingField(format!("report_spec.{}", field)));
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Validate ReportSpec structure and constraints
+    fn validate_report_spec(&self, spec: &crate::dsl::report_spec::ReportSpec) -> Result<(), LlmError> {
+        // Basic validation
+        if spec.select.is_empty() {
+            return Err(LlmError::InvalidFormat("ReportSpec must have at least one select field".to_string()));
+        }
+        
+        // Version validation
+        if spec.version != 1 {
+            return Err(LlmError::InvalidFormat(format!("Unsupported ReportSpec version: {}", spec.version)));
+        }
+        
+        Ok(())
     }
 
     /// Generate system prompt for initial spec generation
     fn build_system_prompt(&self, ctx: &PlannerContext) -> String {
-        format!(
-            r#"You are a ReportSpec generator. Generate valid JSON only.
-
-CONSTRAINTS:
-- Output valid JSON matching the schema
-- Use only fields/tables from schema summary
-- No SQL generation
-- If unsure, add to open_questions
-
-WORKSPACE: {}
-AVAILABLE_TABLES: {:?}
-AVAILABLE_FIELDS: {:?}
-
-OUTPUT FORMAT:
-{{
-  "report_spec": {{ ... }},
-  "assumptions": ["..."],
-  "open_questions": ["..."],
-  "notes": "..."
-}}"#,
-            ctx.workspace, ctx.available_tables, ctx.available_fields
-        )
+        PromptTemplates::system_prompt(ctx)
     }
 
     /// Generate revision prompt for fixing compilation errors
@@ -76,31 +120,7 @@ OUTPUT FORMAT:
         diagnostics: &CompilerDiagnostics,
         ctx: &PlannerContext,
     ) -> String {
-        format!(
-            r#"Previous attempt failed compilation. Fix the ReportSpec.
-
-ORIGINAL PROMPT: {}
-PREVIOUS SPEC: {}
-COMPILER ERRORS: {:?}
-
-WORKSPACE: {}
-AVAILABLE_TABLES: {:?}
-AVAILABLE_FIELDS: {:?}
-
-OUTPUT FORMAT:
-{{
-  "report_spec": {{ ... }},
-  "assumptions": ["..."],
-  "open_questions": ["..."],
-  "notes": "..."
-}}"#,
-            original_prompt,
-            serde_json::to_string_pretty(previous_spec).unwrap_or_default(),
-            diagnostics,
-            ctx.workspace,
-            ctx.available_tables,
-            ctx.available_fields
-        )
+        PromptTemplates::revision_prompt(original_prompt, previous_spec, diagnostics, ctx)
     }
 
     /// Make LLM request and parse response
@@ -113,7 +133,7 @@ OUTPUT FORMAT:
                 },
                 LlmMessage {
                     role: LlmRole::User,
-                    content: user_prompt,
+                    content: PromptTemplates::user_prompt(&user_prompt),
                 },
             ],
             model: self.model.clone(),
