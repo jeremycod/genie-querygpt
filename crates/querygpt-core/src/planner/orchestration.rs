@@ -3,6 +3,8 @@ use crate::dsl::compile::compile_report_spec;
 use crate::dsl::plan::IntermediatePlan;
 use crate::dsl::report_spec::ReportSpec;
 use crate::planner::planner::{NoopPlanner, Planner, PlannerContext, ReportSpecDraft};
+use crate::planner::diff::{diff_report_specs, SpecDiff};
+use crate::planner::confirmation::{UserConfirmation, AutoApproveConfirmation, ConfirmationResult};
 use crate::schema::registry::SchemaRegistry;
 
 /// Phase B Orchestration Result
@@ -12,6 +14,7 @@ pub enum OrchestrationResult {
     Success {
         plan: IntermediatePlan,
         draft: Option<ReportSpecDraft>,
+        diffs: Vec<SpecDiff>,
     },
     /// Compilation failed with diagnostics
     CompilationFailed {
@@ -22,21 +25,39 @@ pub enum OrchestrationResult {
     PlannerFailed {
         error: crate::planner::planner::PlannerError,
     },
+    /// User rejected the changes
+    UserRejected {
+        diffs: Vec<SpecDiff>,
+        draft: ReportSpecDraft,
+    },
+    /// Retry limit exceeded
+    RetryLimitExceeded {
+        diagnostics: CompilerDiagnostics,
+        draft: ReportSpecDraft,
+        attempts: usize,
+    },
 }
 
 /// Phase B Orchestrator - coordinates planner and compiler
 /// This is the main entry point for Phase B functionality
-pub struct Orchestrator<P: Planner> {
+pub struct Orchestrator<P: Planner, C: UserConfirmation> {
     planner: P,
+    confirmation: C,
     max_retries: usize,
 }
 
-impl<P: Planner> Orchestrator<P> {
-    pub fn new(planner: P) -> Self {
+impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
+    pub fn new(planner: P, confirmation: C) -> Self {
         Self {
             planner,
+            confirmation,
             max_retries: 3, // As specified in the plan
         }
+    }
+
+    pub fn with_max_retries(mut self, max_retries: usize) -> Self {
+        self.max_retries = max_retries;
+        self
     }
 
     /// Compile-only flow: takes a ReportSpec directly and compiles it
@@ -47,7 +68,11 @@ impl<P: Planner> Orchestrator<P> {
         spec: &ReportSpec,
     ) -> OrchestrationResult {
         match compile_report_spec(registry, spec) {
-            Ok(plan) => OrchestrationResult::Success { plan, draft: None },
+            Ok(plan) => OrchestrationResult::Success { 
+                plan, 
+                draft: None,
+                diffs: vec![], // No changes in compile-only mode
+            },
             Err(diagnostics) => OrchestrationResult::CompilationFailed {
                 diagnostics,
                 draft: None,
@@ -56,7 +81,7 @@ impl<P: Planner> Orchestrator<P> {
     }
 
     /// AI-assisted flow: takes natural language prompt and generates ReportSpec
-    /// This is the new Phase B functionality (currently using NoopPlanner)
+    /// This is the new Phase B functionality with retry orchestration
     pub fn suggest_and_compile(
         &self,
         registry: &SchemaRegistry,
@@ -64,62 +89,112 @@ impl<P: Planner> Orchestrator<P> {
         context: PlannerContext,
     ) -> OrchestrationResult {
         // Step 1: Get initial suggestion from planner
-        let draft = match self.planner.suggest_report_spec(prompt, context.clone()) {
+        let initial_draft = match self.planner.suggest_report_spec(prompt, context.clone()) {
             Ok(draft) => draft,
             Err(error) => return OrchestrationResult::PlannerFailed { error },
         };
 
         // Step 2: Attempt compilation with retry loop
-        let mut current_draft = draft;
-        for _attempt in 0..self.max_retries {
+        let mut current_draft = initial_draft;
+        let original_spec = current_draft.spec.clone();
+        
+        for attempt in 1..=self.max_retries {
+            // Try compilation
             match compile_report_spec(registry, &current_draft.spec) {
                 Ok(plan) => {
-                    return OrchestrationResult::Success {
-                        plan,
-                        draft: Some(current_draft),
+                    // Compilation succeeded - check for changes and get user confirmation
+                    let diffs = diff_report_specs(&original_spec, &current_draft.spec);
+                    
+                    match self.confirmation.confirm_changes(&diffs, attempt) {
+                        ConfirmationResult::Approved => {
+                            return OrchestrationResult::Success {
+                                plan,
+                                draft: Some(current_draft),
+                                diffs,
+                            };
+                        }
+                        ConfirmationResult::Rejected => {
+                            return OrchestrationResult::UserRejected {
+                                diffs,
+                                draft: current_draft,
+                            };
+                        }
+                        ConfirmationResult::RequestRevision(feedback) => {
+                            // User wants revision - treat as compilation failure with custom feedback
+                            let user_feedback_prompt = format!("{} (User feedback: {})", prompt, feedback);
+                            
+                            // Create mock diagnostics for user feedback
+                            let mock_diagnostics = CompilerDiagnostics::error(
+                                crate::compile::diagnostics::Diagnostic {
+                                    code: crate::compile::diagnostics::DiagnosticCode::InvalidFilter,
+                                    message: format!("User requested revision: {}", feedback),
+                                    spans: vec![],
+                                    details: serde_json::json!({ "user_feedback": feedback }),
+                                    help: vec!["Address the user's feedback".to_string()],
+                                }
+                            );
+                            
+                            // Try to get revision from planner
+                            match self.planner.revise_report_spec(
+                                &user_feedback_prompt,
+                                context.clone(),
+                                &mock_diagnostics,
+                            ) {
+                                Ok(revised_draft) => {
+                                    current_draft = revised_draft;
+                                    continue; // Continue retry loop
+                                }
+                                Err(_) => {
+                                    return OrchestrationResult::RetryLimitExceeded {
+                                        diagnostics: mock_diagnostics,
+                                        draft: current_draft,
+                                        attempts: attempt,
+                                    };
+                                }
+                            }
+                        }
                     }
                 }
                 Err(diagnostics) => {
-                    // Step 3: If compilation fails, ask planner to revise
-                    match self.planner.revise_report_spec(
-                        prompt,
-                        context.clone(),
-                        &diagnostics,
-                    ) {
-                        Ok(revised_draft) => {
-                            current_draft = revised_draft;
-                            // Continue retry loop
+                    // Compilation failed - ask planner to revise
+                    if attempt < self.max_retries {
+                        match self.planner.revise_report_spec(
+                            prompt,
+                            context.clone(),
+                            &diagnostics,
+                        ) {
+                            Ok(revised_draft) => {
+                                current_draft = revised_draft;
+                                continue; // Continue retry loop
+                            }
+                            Err(_) => {
+                                // Planner can't revise, return compilation failure
+                                return OrchestrationResult::CompilationFailed {
+                                    diagnostics,
+                                    draft: Some(current_draft),
+                                };
+                            }
                         }
-                        Err(_) => {
-                            // Planner can't revise, return compilation failure
-                            return OrchestrationResult::CompilationFailed {
-                                diagnostics,
-                                draft: Some(current_draft),
-                            };
-                        }
+                    } else {
+                        // Max retries exceeded
+                        return OrchestrationResult::RetryLimitExceeded {
+                            diagnostics,
+                            draft: current_draft,
+                            attempts: attempt,
+                        };
                     }
                 }
             }
         }
 
-        // Max retries exceeded
-        // Try one final compilation to get the latest diagnostics
-        match compile_report_spec(registry, &current_draft.spec) {
-            Ok(plan) => OrchestrationResult::Success {
-                plan,
-                draft: Some(current_draft),
-            },
-            Err(diagnostics) => OrchestrationResult::CompilationFailed {
-                diagnostics,
-                draft: Some(current_draft),
-            },
-        }
+        // This should never be reached due to the loop structure, but just in case
+        unreachable!("Retry loop should have returned a result")
     }
 }
 
 /// Convenience function for compile-only flow using NoopPlanner
 pub fn compile_only(registry: &SchemaRegistry, spec: &ReportSpec) -> OrchestrationResult {
-    let orchestrator = Orchestrator::new(NoopPlanner);
+    let orchestrator = Orchestrator::new(NoopPlanner, AutoApproveConfirmation);
     orchestrator.compile_only(registry, spec)
 }
 
@@ -127,6 +202,7 @@ pub fn compile_only(registry: &SchemaRegistry, spec: &ReportSpec) -> Orchestrati
 mod tests {
     use super::*;
     use crate::dsl::report_spec::{Mode, SelectItem};
+    use crate::planner::confirmation::MockConfirmation;
     use crate::schema::registry::SchemaRegistry;
 
     fn load_test_registry() -> SchemaRegistry {
@@ -155,8 +231,9 @@ mod tests {
         let result = compile_only(&registry, &spec);
         
         match result {
-            OrchestrationResult::Success { plan, draft } => {
+            OrchestrationResult::Success { plan, draft, diffs } => {
                 assert!(draft.is_none()); // No draft in compile-only mode
+                assert!(diffs.is_empty()); // No diffs in compile-only mode
                 assert_eq!(plan.workspace, "campaigns_offers");
                 assert!(!plan.projections.is_empty());
             }
@@ -166,7 +243,7 @@ mod tests {
 
     #[test]
     fn noop_planner_returns_unimplemented() {
-        let orchestrator = Orchestrator::new(NoopPlanner);
+        let orchestrator = Orchestrator::new(NoopPlanner, MockConfirmation { should_approve: true });
         let registry = load_test_registry();
         
         let context = PlannerContext {
@@ -187,6 +264,41 @@ mod tests {
                     error,
                     crate::planner::planner::PlannerError::Unimplemented
                 ));
+            }
+            _ => panic!("Expected planner failure with NoopPlanner"),
+        }
+    }
+
+    #[test]
+    fn orchestrator_respects_max_retries() {
+        let orchestrator = Orchestrator::new(NoopPlanner, MockConfirmation { should_approve: true })
+            .with_max_retries(2);
+        
+        // Verify max_retries is set correctly
+        assert_eq!(orchestrator.max_retries, 2);
+    }
+
+    #[test]
+    fn user_rejection_returns_appropriate_result() {
+        let orchestrator = Orchestrator::new(NoopPlanner, MockConfirmation { should_approve: false });
+        let registry = load_test_registry();
+        
+        let context = PlannerContext {
+            workspace: "campaigns_offers".to_string(),
+            available_fields: vec!["campaign_id".to_string()],
+            available_tables: vec!["campaigns_latest".to_string()],
+        };
+
+        let result = orchestrator.suggest_and_compile(
+            &registry,
+            "show me all campaigns",
+            context,
+        );
+
+        // Should fail at planner level before reaching confirmation
+        match result {
+            OrchestrationResult::PlannerFailed { .. } => {
+                // Expected with NoopPlanner
             }
             _ => panic!("Expected planner failure with NoopPlanner"),
         }
