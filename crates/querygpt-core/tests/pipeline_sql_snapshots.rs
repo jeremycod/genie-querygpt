@@ -5,19 +5,21 @@ use querygpt_core::dsl::report_spec::{PaginationSpec, ReportSpec};
 use querygpt_core::schema::registry::SchemaRegistry;
 use querygpt_core::sql::render::render_sql;
 
-
-fn repo_path(rel: &str) -> String {
+fn test_registry() -> SchemaRegistry {
+    // Change to repo root directory for schema loading
     let crate_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo_root = crate_root
         .parent().and_then(|p| p.parent())
         .expect("resolve repo root from CARGO_MANIFEST_DIR");
-
-    repo_root.join(rel).to_str().unwrap().to_string()
-}
-
-fn test_registry() -> SchemaRegistry {
-    SchemaRegistry::load(&repo_path("config/workspaces/campaigns_offers.index.json"))
-        .expect("load SchemaRegistry")
+    
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&repo_root).expect("change to repo root");
+    
+    let result = SchemaRegistry::load("config/workspaces/campaigns_offers.index.json")
+        .expect("load SchemaRegistry");
+    
+    std::env::set_current_dir(original_dir).expect("restore original directory");
+    result
 }
 
 

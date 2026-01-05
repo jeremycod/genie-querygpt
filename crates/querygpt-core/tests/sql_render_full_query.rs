@@ -1,35 +1,32 @@
 
-use std::path::PathBuf;
 use querygpt_core::dsl::compile::compile_report_spec;
 use querygpt_core::dsl::plan::{IntermediatePlan, JoinCondition, JoinType, PlanJoin, PlanOrder, PlanProjection, PlanTable, SortDirection};
 use querygpt_core::dsl::report_spec::ReportSpec;
 use querygpt_core::schema::registry::SchemaRegistry;
 use querygpt_core::sql::render::render_sql;
-fn repo_root_from_crate() -> PathBuf {
-    // crates/querygpt-core -> repo root (two levels up)
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    crate_dir
-        .parent().and_then(|p| p.parent())
-        .map(|p| p.to_path_buf())
-        .expect("resolve repo root from CARGO_MANIFEST_DIR")
-}
 
-fn repo_path(rel: &str) -> String {
-    repo_root_from_crate().join(rel).to_string_lossy().to_string()
-}
 fn normalize_sql(s: &str) -> String {
     s.lines().map(|l| l.trim_end()).collect::<Vec<_>>().join("\n").trim().to_string()
 }
 
 #[test]
 fn full_query_snapshot_from_reportspec() {
-    let reg = SchemaRegistry::load(&repo_path("config/workspaces/campaigns_offers.index.json"))
+    // Change to repo root directory for schema loading
+    let crate_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = crate_root
+        .parent().and_then(|p| p.parent())
+        .expect("resolve repo root from CARGO_MANIFEST_DIR");
+    
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(&repo_root).expect("change to repo root");
+    
+    let reg = SchemaRegistry::load("config/workspaces/campaigns_offers.index.json")
         .expect("load SchemaRegistry");
-
+    
+    std::env::set_current_dir(original_dir).expect("restore original directory");
 
     let spec_str = include_str!("fixtures/report_specs/campaigns_offers_prepaid_apac.json");
     let spec: ReportSpec = serde_json::from_str(spec_str).expect("parse ReportSpec");
-
 
     let plan = compile_report_spec(&reg, &spec).expect("compile plan");
     let sql = render_sql(&plan).expect("render sql");
