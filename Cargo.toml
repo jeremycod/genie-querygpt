@@ -3,6 +3,7 @@ members = [
   "crates/querygpt-core",
   "crates/querygpt-server",
   "crates/querygpt-worker",
+  "crates/querygpt-cli",
 ]
 
 resolver = "2"
