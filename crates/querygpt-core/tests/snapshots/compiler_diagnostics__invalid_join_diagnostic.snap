@@ -3,13 +3,19 @@ source: crates/querygpt-core/tests/compiler_diagnostics.rs
 expression: diagnostics
 ---
 {
-  "diagnostics": [
+  "errors": [
     {
       "code": "invalid_join",
       "message": "invalid join: invalid join expression (missing '='): 'left.left_id right.right_id'",
-      "detail": {
+      "spans": [],
+      "details": {
         "reason": "invalid join expression (missing '='): 'left.left_id right.right_id'"
-      }
+      },
+      "help": [
+        "Check that all referenced tables exist",
+        "Verify join conditions are valid"
+      ]
     }
-  ]
+  ],
+  "warnings": []
 }

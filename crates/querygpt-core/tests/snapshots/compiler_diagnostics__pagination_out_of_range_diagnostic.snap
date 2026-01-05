@@ -3,14 +3,20 @@ source: crates/querygpt-core/tests/compiler_diagnostics.rs
 expression: diagnostics
 ---
 {
-  "diagnostics": [
+  "errors": [
     {
-      "code": "pagination_out_of_range",
+      "code": "invalid_pagination",
       "message": "pagination value for 'limit' must be non-negative",
-      "field": "limit",
-      "detail": {
+      "spans": [
+        {
+          "pointer": "/unknown/limit"
+        }
+      ],
+      "details": {
         "value": -5
-      }
+      },
+      "help": []
     }
-  ]
+  ],
+  "warnings": []
 }

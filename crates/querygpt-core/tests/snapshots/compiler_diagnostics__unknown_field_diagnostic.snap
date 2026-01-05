@@ -3,12 +3,24 @@ source: crates/querygpt-core/tests/compiler_diagnostics.rs
 expression: diagnostics
 ---
 {
-  "diagnostics": [
+  "errors": [
     {
       "code": "unknown_field",
       "message": "unknown field 'nonexistent_field' in select",
-      "field": "nonexistent_field",
-      "context": "select"
+      "spans": [
+        {
+          "pointer": "/select/nonexistent_field"
+        }
+      ],
+      "details": {
+        "context": "select",
+        "field": "nonexistent_field"
+      },
+      "help": [
+        "Check available fields in the schema",
+        "Verify field name spelling"
+      ]
     }
-  ]
+  ],
+  "warnings": []
 }
