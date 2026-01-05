@@ -32,8 +32,9 @@ impl Default for FixturePlanner {
     }
 }
 
+#[async_trait::async_trait]
 impl Planner for FixturePlanner {
-    fn suggest_report_spec(
+    async fn suggest_report_spec(
         &self,
         prompt: &str,
         _ctx: PlannerContext,
@@ -51,14 +52,14 @@ impl Planner for FixturePlanner {
         }
     }
 
-    fn revise_report_spec(
+    async fn revise_report_spec(
         &self,
         prompt: &str,
-        _ctx: PlannerContext,
+        ctx: PlannerContext,
         _diagnostics: &CompilerDiagnostics,
     ) -> PlannerResult<ReportSpecDraft> {
         // For fixture planner, revision is the same as initial suggestion
         // In real scenarios, we might have separate revision fixtures
-        self.suggest_report_spec(prompt, _ctx)
+        self.suggest_report_spec(prompt, ctx).await
     }
 }

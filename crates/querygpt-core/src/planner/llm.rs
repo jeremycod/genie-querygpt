@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
 /// Core LLM client abstraction for generating ReportSpecs
+#[async_trait::async_trait]
 pub trait LlmClient: Send + Sync {
-    fn complete(&self, req: LlmRequest) -> anyhow::Result<LlmResponse>;
+    async fn complete(&self, req: LlmRequest) -> anyhow::Result<LlmResponse>;
 }
 
 /// Request structure for LLM completion

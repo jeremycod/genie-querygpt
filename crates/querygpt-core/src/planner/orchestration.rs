@@ -85,7 +85,7 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
 
     /// AI-assisted flow: takes natural language prompt and generates ReportSpec
     /// This is the new Phase B functionality with retry orchestration
-    pub fn suggest_and_compile(
+    pub async fn suggest_and_compile(
         &self,
         registry: &SchemaRegistry,
         prompt: &str,
@@ -101,7 +101,7 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
         trace.increment_attempt();
         FlowLogger::planner_suggest(trace.attempts);
         
-        let initial_draft = match self.planner.suggest_report_spec(prompt, context.clone()) {
+        let initial_draft = match self.planner.suggest_report_spec(prompt, context.clone()).await {
             Ok(draft) => draft,
             Err(error) => {
                 trace.set_final_status(CompilationStatus::PlannerFailed);
@@ -167,7 +167,7 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
                                 &user_feedback_prompt,
                                 context.clone(),
                                 &mock_diagnostics,
-                            ) {
+                            ).await {
                                 Ok(revised_draft) => {
                                     current_draft = revised_draft;
                                     continue; // Continue retry loop
@@ -199,7 +199,7 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
                             prompt,
                             context.clone(),
                             &diagnostics,
-                        ) {
+                        ).await {
                             Ok(revised_draft) => {
                                 current_draft = revised_draft;
                                 continue; // Continue retry loop
@@ -282,8 +282,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn noop_planner_returns_unimplemented() {
+    #[tokio::test]
+    async fn noop_planner_returns_unimplemented() {
         let orchestrator = Orchestrator::new(NoopPlanner, MockConfirmation { should_approve: true });
         let registry = load_test_registry();
         
@@ -297,7 +297,7 @@ mod tests {
             &registry,
             "show me all campaigns",
             context,
-        );
+        ).await;
 
         match result {
             OrchestrationResult::PlannerFailed { error } => {
@@ -319,8 +319,8 @@ mod tests {
         assert_eq!(orchestrator.max_retries, 2);
     }
 
-    #[test]
-    fn user_rejection_returns_appropriate_result() {
+    #[tokio::test]
+    async fn user_rejection_returns_appropriate_result() {
         let orchestrator = Orchestrator::new(NoopPlanner, MockConfirmation { should_approve: false });
         let registry = load_test_registry();
         
@@ -334,7 +334,7 @@ mod tests {
             &registry,
             "show me all campaigns",
             context,
-        );
+        ).await;
 
         // Should fail at planner level before reaching confirmation
         match result {

@@ -11,12 +11,3 @@ pub mod prompt_templates;
 pub mod openai_client;
 pub mod schema_summary;
 pub mod trace;
-
-#[cfg(test)]
-mod llm_planner_tests;
-#[cfg(test)]
-mod prompt_template_tests;
-#[cfg(test)]
-mod diagnostics_feedback_tests;
-#[cfg(test)]
-mod schema_summary_tests;

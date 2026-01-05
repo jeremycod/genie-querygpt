@@ -1,11 +1,11 @@
-use crate::planner::{
+use querygpt_core::planner::{
     prompt_templates::PromptTemplates,
     planner::{PlannerContext, Planner},
     llm_planner::LlmPlanner,
     mock_client::MockClient,
 };
-use crate::dsl::report_spec::{ReportSpec, SelectItem, Mode};
-use crate::compile::diagnostics::CompilerDiagnostics;
+use querygpt_core::dsl::report_spec::{ReportSpec, SelectItem, Mode};
+use querygpt_core::compile::diagnostics::CompilerDiagnostics;
 
 #[test]
 fn system_prompt_includes_required_elements() {
@@ -66,8 +66,8 @@ fn user_prompt_formats_natural_language() {
     assert!(prompt.contains("Show me all offers in APAC"));
 }
 
-#[test]
-fn json_parsing_handles_valid_response() {
+#[tokio::test]
+async fn json_parsing_handles_valid_response() {
     let mock_client = MockClient::new()
         .with_default_response(r#"{
             "report_spec": {
@@ -92,12 +92,12 @@ fn json_parsing_handles_valid_response() {
         vec!["offers".to_string()],
     );
     
-    let result = planner.suggest_report_spec("test", ctx);
+    let result = planner.suggest_report_spec("test", ctx).await;
     assert!(result.is_ok());
 }
 
-#[test]
-fn json_parsing_rejects_invalid_response() {
+#[tokio::test]
+async fn json_parsing_rejects_invalid_response() {
     let mock_client = MockClient::new()
         .with_default_response("This is not JSON".to_string());
     
@@ -109,12 +109,12 @@ fn json_parsing_rejects_invalid_response() {
         vec!["offers".to_string()],
     );
     
-    let result = planner.suggest_report_spec("test", ctx);
+    let result = planner.suggest_report_spec("test", ctx).await;
     assert!(result.is_err());
 }
 
-#[test]
-fn json_parsing_extracts_json_from_mixed_content() {
+#[tokio::test]
+async fn json_parsing_extracts_json_from_mixed_content() {
     let mock_client = MockClient::new()
         .with_default_response(r#"Here's the JSON response:
         {
@@ -141,7 +141,7 @@ fn json_parsing_extracts_json_from_mixed_content() {
         vec!["offers".to_string()],
     );
     
-    let result = planner.suggest_report_spec("test", ctx);
+    let result = planner.suggest_report_spec("test", ctx).await;
     assert!(result.is_ok());
     assert!(result.unwrap().assumptions.contains(&"Extracted from mixed content".to_string()));
 }

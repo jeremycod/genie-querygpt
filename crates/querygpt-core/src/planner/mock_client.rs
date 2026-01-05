@@ -46,8 +46,9 @@ impl Default for MockClient {
     }
 }
 
+#[async_trait::async_trait]
 impl LlmClient for MockClient {
-    fn complete(&self, req: LlmRequest) -> anyhow::Result<LlmResponse> {
+    async fn complete(&self, req: LlmRequest) -> anyhow::Result<LlmResponse> {
         let prompt_key = self.extract_prompt_key(&req);
         
         let content = self

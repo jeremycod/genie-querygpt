@@ -1,13 +1,13 @@
-use crate::planner::{
+use querygpt_core::planner::{
     fixture_planner::FixturePlanner,
     llm_planner::LlmPlanner,
     mock_client::MockClient,
     planner::{Planner, PlannerContext},
 };
-use crate::dsl::report_spec::{ReportSpec, SelectItem, Mode};
+use querygpt_core::dsl::report_spec::{ReportSpec, SelectItem, Mode};
 
-#[test]
-fn fixture_planner_returns_configured_spec() {
+#[tokio::test]
+async fn fixture_planner_returns_configured_spec() {
     let mut planner = FixturePlanner::new();
     
     let test_spec = ReportSpec {
@@ -31,13 +31,13 @@ fn fixture_planner_returns_configured_spec() {
         vec!["offers".to_string()],
     );
     
-    let result = planner.suggest_report_spec("test prompt", ctx).unwrap();
+    let result = planner.suggest_report_spec("test prompt", ctx).await.unwrap();
     assert_eq!(result.spec, test_spec);
     assert!(result.assumptions.contains(&"Using fixture data".to_string()));
 }
 
-#[test]
-fn fixture_planner_returns_error_for_unknown_prompt() {
+#[tokio::test]
+async fn fixture_planner_returns_error_for_unknown_prompt() {
     let planner = FixturePlanner::new();
     
     let ctx = PlannerContext::simple(
@@ -46,12 +46,12 @@ fn fixture_planner_returns_error_for_unknown_prompt() {
         vec![],
     );
     
-    let result = planner.suggest_report_spec("unknown prompt", ctx);
+    let result = planner.suggest_report_spec("unknown prompt", ctx).await;
     assert!(result.is_err());
 }
 
-#[test]
-fn mock_client_returns_configured_response() {
+#[tokio::test]
+async fn mock_client_returns_configured_response() {
     let mock_client = MockClient::new()
         .with_default_response(r#"{
             "report_spec": {
@@ -76,7 +76,7 @@ fn mock_client_returns_configured_response() {
         vec!["offers".to_string()],
     );
     
-    let result = planner.suggest_report_spec("test prompt", ctx).unwrap();
+    let result = planner.suggest_report_spec("test prompt", ctx).await.unwrap();
     assert_eq!(result.spec.select.len(), 1);
     assert_eq!(result.spec.select[0].field, "offer_id");
     assert!(result.assumptions.contains(&"Mock response".to_string()));

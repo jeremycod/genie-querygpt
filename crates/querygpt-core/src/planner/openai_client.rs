@@ -1,10 +1,12 @@
 use super::llm::{LlmClient, LlmRequest, LlmResponse, LlmUsage, LlmRole};
 use serde::{Deserialize, Serialize};
+use reqwest::Client;
 
 /// OpenAI API client for real LLM integration
 pub struct OpenAIClient {
     api_key: String,
     base_url: String,
+    client: Client,
 }
 
 #[derive(Serialize)]
@@ -12,6 +14,7 @@ struct OpenAIRequest {
     model: String,
     messages: Vec<OpenAIMessage>,
     temperature: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
 }
 
@@ -49,6 +52,7 @@ impl OpenAIClient {
         Self {
             api_key,
             base_url: "https://api.openai.com/v1".to_string(),
+            client: Client::new(),
         }
     }
 
@@ -59,8 +63,9 @@ impl OpenAIClient {
     }
 }
 
+#[async_trait::async_trait]
 impl LlmClient for OpenAIClient {
-    fn complete(&self, req: LlmRequest) -> anyhow::Result<LlmResponse> {
+    async fn complete(&self, req: LlmRequest) -> anyhow::Result<LlmResponse> {
         let openai_req = OpenAIRequest {
             model: req.model,
             messages: req.messages.into_iter().map(|msg| OpenAIMessage {
@@ -75,11 +80,40 @@ impl LlmClient for OpenAIClient {
             max_tokens: req.max_tokens,
         };
 
-        // For now, return a placeholder response
-        // In a real implementation, this would make an HTTP request to OpenAI
-        // Using reqwest or similar HTTP client
-        
-        // Placeholder implementation - would need HTTP client dependency
-        Err(anyhow::anyhow!("OpenAI client requires HTTP implementation - use MockClient for testing"))
+        let response = self.client
+            .post(&format!("{}/chat/completions", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&openai_req)
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("HTTP request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("OpenAI API error {}: {}", status, error_text));
+        }
+
+        let openai_response: OpenAIResponse = response
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to parse OpenAI response: {}", e))?;
+
+        let choice = openai_response.choices
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No choices in OpenAI response"))?;
+
+        let usage = openai_response.usage.map(|u| LlmUsage {
+            prompt_tokens: u.prompt_tokens,
+            completion_tokens: u.completion_tokens,
+            total_tokens: u.total_tokens,
+        });
+
+        Ok(LlmResponse {
+            content: choice.message.content,
+            usage,
+        })
     }
 }
