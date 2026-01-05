@@ -1,5 +1,6 @@
 use crate::dsl::report_spec::ReportSpec;
 use crate::compile::diagnostics::CompilerDiagnostics;
+use super::schema_summary::{SchemaSummary, ExamplePair, PlannerConstraints};
 use serde::{Deserialize, Serialize};
 
 /// Phase B Planner Interface - Strict boundary for AI behavior
@@ -19,12 +20,56 @@ pub trait Planner {
     ) -> PlannerResult<ReportSpecDraft>;
 }
 
-/// Context provided to planner for suggestions
+/// Enhanced context provided to planner for suggestions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlannerContext {
     pub workspace: String,
+    pub schema_summary: SchemaSummary,
+    pub report_spec_schema: Option<serde_json::Value>,
+    pub examples: Vec<ExamplePair>,
+    pub constraints: PlannerConstraints,
+    // Legacy fields for backward compatibility
+    #[serde(default)]
     pub available_fields: Vec<String>,
+    #[serde(default)]
     pub available_tables: Vec<String>,
+}
+
+impl PlannerContext {
+    /// Create a simple context for testing (backward compatible)
+    pub fn simple(workspace: String, available_fields: Vec<String>, available_tables: Vec<String>) -> Self {
+        let schema_summary = SchemaSummary::minimal(&workspace);
+        Self {
+            workspace: workspace.clone(),
+            schema_summary,
+            report_spec_schema: None,
+            examples: vec![],
+            constraints: PlannerConstraints::default(),
+            available_fields,
+            available_tables,
+        }
+    }
+    
+    /// Create an enhanced context with full schema summary
+    pub fn enhanced(
+        workspace: String,
+        schema_summary: SchemaSummary,
+        examples: Vec<ExamplePair>,
+        constraints: Option<PlannerConstraints>,
+    ) -> Self {
+        let available_fields = schema_summary.get_all_fields();
+        let available_tables = schema_summary.get_all_tables();
+        
+        Self {
+            workspace,
+            schema_summary,
+            report_spec_schema: None,
+            examples,
+            constraints: constraints.unwrap_or_default(),
+            available_fields,
+            available_tables,
+        }
+    }
 }
 
 /// Planner output - always a draft that must be compiled

@@ -246,11 +246,11 @@ mod tests {
         let orchestrator = Orchestrator::new(NoopPlanner, MockConfirmation { should_approve: true });
         let registry = load_test_registry();
         
-        let context = PlannerContext {
-            workspace: "campaigns_offers".to_string(),
-            available_fields: vec!["campaign_id".to_string()],
-            available_tables: vec!["campaigns_latest".to_string()],
-        };
+        let context = PlannerContext::simple(
+            "campaigns_offers".to_string(),
+            vec!["campaign_id".to_string()],
+            vec!["campaigns_latest".to_string()],
+        );
 
         let result = orchestrator.suggest_and_compile(
             &registry,
@@ -283,11 +283,11 @@ mod tests {
         let orchestrator = Orchestrator::new(NoopPlanner, MockConfirmation { should_approve: false });
         let registry = load_test_registry();
         
-        let context = PlannerContext {
-            workspace: "campaigns_offers".to_string(),
-            available_fields: vec!["campaign_id".to_string()],
-            available_tables: vec!["campaigns_latest".to_string()],
-        };
+        let context = PlannerContext::simple(
+            "campaigns_offers".to_string(),
+            vec!["campaign_id".to_string()],
+            vec!["campaigns_latest".to_string()],
+        );
 
         let result = orchestrator.suggest_and_compile(
             &registry,

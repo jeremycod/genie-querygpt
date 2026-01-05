@@ -25,11 +25,11 @@ fn fixture_planner_returns_configured_spec() {
     
     planner.add_fixture("test prompt".to_string(), test_spec.clone());
     
-    let ctx = PlannerContext {
-        workspace: "test".to_string(),
-        available_fields: vec!["offer_id".to_string()],
-        available_tables: vec!["offers".to_string()],
-    };
+    let ctx = PlannerContext::simple(
+        "test".to_string(),
+        vec!["offer_id".to_string()],
+        vec!["offers".to_string()],
+    );
     
     let result = planner.suggest_report_spec("test prompt", ctx).unwrap();
     assert_eq!(result.spec, test_spec);
@@ -40,11 +40,11 @@ fn fixture_planner_returns_configured_spec() {
 fn fixture_planner_returns_error_for_unknown_prompt() {
     let planner = FixturePlanner::new();
     
-    let ctx = PlannerContext {
-        workspace: "test".to_string(),
-        available_fields: vec![],
-        available_tables: vec![],
-    };
+    let ctx = PlannerContext::simple(
+        "test".to_string(),
+        vec![],
+        vec![],
+    );
     
     let result = planner.suggest_report_spec("unknown prompt", ctx);
     assert!(result.is_err());
@@ -70,11 +70,11 @@ fn mock_client_returns_configured_response() {
     
     let planner = LlmPlanner::new(Box::new(mock_client), "test-model".to_string());
     
-    let ctx = PlannerContext {
-        workspace: "test".to_string(),
-        available_fields: vec!["offer_id".to_string()],
-        available_tables: vec!["offers".to_string()],
-    };
+    let ctx = PlannerContext::simple(
+        "test".to_string(),
+        vec!["offer_id".to_string()],
+        vec!["offers".to_string()],
+    );
     
     let result = planner.suggest_report_spec("test prompt", ctx).unwrap();
     assert_eq!(result.spec.select.len(), 1);
