@@ -3,7 +3,7 @@ use querygpt_core::planner::orchestration::{Orchestrator, OrchestrationResult};
 use querygpt_core::planner::planner::PlannerContext;
 use querygpt_core::dsl::report_spec::{ReportSpec, SelectItem, Mode};
 use querygpt_core::planner::fixture_planner::FixturePlanner;
-use querygpt_core::planner::confirmation::AutoApproveConfirmation;
+use querygpt_core::planner::confirmation::{InteractiveConfirmation, AutoApproveConfirmation};
 use querygpt_core::planner::trace::FlowLogger;
 use querygpt_core::schema::registry::SchemaRegistry;
 use querygpt_core::sql::render::render_sql;
@@ -50,7 +50,7 @@ fn main() -> anyhow::Result<()> {
 
 fn handle_plan_command(
     prompt: String,
-    _yes: bool,
+    yes: bool,
     max_attempts: usize,
     _explain: bool,
 ) -> anyhow::Result<()> {
@@ -68,7 +68,7 @@ fn handle_plan_command(
     // Create orchestrator with fixture planner for now
     let mut planner = FixturePlanner::new();
     
-    // Add a simple test fixture
+    // Add test fixtures
     planner.add_fixture(
         "show me all campaigns".to_string(),
         ReportSpec {
@@ -84,12 +84,36 @@ fn handle_plan_command(
             pagination: None,
         },
     );
-    let confirmation = AutoApproveConfirmation;
-    let orchestrator = Orchestrator::new(planner, confirmation)
-        .with_max_retries(max_attempts);
-
+    
+    planner.add_fixture(
+        "export all campaigns".to_string(),
+        ReportSpec {
+            version: 1,
+            workspace: "campaigns_offers".to_string(),
+            select: vec![SelectItem {
+                field: "campaign_id".to_string(),
+                alias: Some("id".to_string()),
+            }],
+            filters: vec![],
+            order_by: vec![],
+            mode: Mode::Export,
+            pagination: None,
+        },
+    );
+    
+    // Choose confirmation based on --yes flag
+    let result = if yes {
+        let orchestrator = Orchestrator::new(planner, AutoApproveConfirmation)
+            .with_max_retries(max_attempts);
+        orchestrator.suggest_and_compile(&registry, &prompt, context)
+    } else {
+        let orchestrator = Orchestrator::new(planner, InteractiveConfirmation)
+            .with_max_retries(max_attempts);
+        orchestrator.suggest_and_compile(&registry, &prompt, context)
+    };
+    
     // Execute the flow
-    match orchestrator.suggest_and_compile(&registry, &prompt, context) {
+    match result {
         OrchestrationResult::Success { plan, trace, .. } => {
             if let Some(trace) = trace {
                 println!("✅ Plan generated successfully after {} attempts", trace.attempts);
