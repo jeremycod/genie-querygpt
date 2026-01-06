@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
 
+use crate::dsl::report_spec::ReportSpec;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::dsl::report_spec::ReportSpec;
 
 /// Captures the planner-facing state for turning a prompt into a runnable spec.
 ///

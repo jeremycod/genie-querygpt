@@ -1,7 +1,7 @@
+use super::planner::PlannerContext;
+use super::schema_summary::SchemaSummary;
 use crate::compile::diagnostics::CompilerDiagnostics;
 use crate::dsl::report_spec::ReportSpec;
-use super::planner::PlannerContext;
-use super::schema_summary::{SchemaSummary};
 
 /// Prompt template builder for LLM interactions
 pub struct PromptTemplates;
@@ -12,7 +12,7 @@ impl PromptTemplates {
         let schema_info = Self::format_schema_summary(&ctx.schema_summary);
         let examples_info = Self::format_examples(&ctx.examples);
         let constraints_info = Self::format_constraints(&ctx.constraints);
-        
+
         format!(
             r#"You are a ReportSpec generator. Generate valid JSON only.
 
@@ -44,11 +44,7 @@ REQUIRED OUTPUT FORMAT:
 }}
 
 IMPORTANT: Only output valid JSON. No explanations outside the JSON structure."#,
-            constraints_info,
-            ctx.workspace,
-            schema_info,
-            examples_info,
-            ctx.workspace
+            constraints_info, ctx.workspace, schema_info, examples_info, ctx.workspace
         )
     }
 
@@ -61,7 +57,7 @@ IMPORTANT: Only output valid JSON. No explanations outside the JSON structure."#
     ) -> String {
         let schema_info = Self::format_schema_summary(&ctx.schema_summary);
         let constraints_info = Self::format_constraints(&ctx.constraints);
-        
+
         format!(
             r#"Previous attempt failed compilation. Fix the ReportSpec.
 
@@ -104,13 +100,16 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
 
     /// Generate user prompt with natural language request
     pub fn user_prompt(natural_language: &str) -> String {
-        format!("Generate a ReportSpec for this request: {}", natural_language)
+        format!(
+            "Generate a ReportSpec for this request: {}",
+            natural_language
+        )
     }
-    
+
     /// Format schema summary for LLM context
     fn format_schema_summary(schema: &SchemaSummary) -> String {
         let mut result = String::from("SCHEMA SUMMARY:\n");
-        
+
         // Format tables and fields
         for table in &schema.tables {
             result.push_str(&format!("Table: {} (alias: {})\n", table.name, table.alias));
@@ -119,8 +118,15 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
             }
             result.push_str("  Fields:\n");
             for field in &table.fields {
-                let nullable = if field.nullable { "nullable" } else { "required" };
-                result.push_str(&format!("    - {} ({}, {})\n", field.name, field.field_type, nullable));
+                let nullable = if field.nullable {
+                    "nullable"
+                } else {
+                    "required"
+                };
+                result.push_str(&format!(
+                    "    - {} ({}, {})\n",
+                    field.name, field.field_type, nullable
+                ));
                 if let Some(desc) = &field.description {
                     result.push_str(&format!("      Description: {}\n", desc));
                 }
@@ -130,27 +136,31 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
             }
             result.push('\n');
         }
-        
+
         // Format enums
         if !schema.enums.is_empty() {
             result.push_str("ENUMS:\n");
             for enum_def in &schema.enums {
-                result.push_str(&format!("  {}: [{}]\n", enum_def.name, enum_def.values.join(", ")));
+                result.push_str(&format!(
+                    "  {}: [{}]\n",
+                    enum_def.name,
+                    enum_def.values.join(", ")
+                ));
                 if let Some(desc) = &enum_def.description {
                     result.push_str(&format!("    Description: {}\n", desc));
                 }
             }
         }
-        
+
         result
     }
-    
+
     /// Format examples for LLM context
     fn format_examples(examples: &[super::schema_summary::ExamplePair]) -> String {
         if examples.is_empty() {
             return String::new();
         }
-        
+
         let mut result = String::from("EXAMPLES:\n");
         for (i, example) in examples.iter().enumerate() {
             result.push_str(&format!("Example {}:\n", i + 1));
@@ -161,24 +171,30 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
             }
             result.push('\n');
         }
-        
+
         result
     }
-    
+
     /// Format constraints for LLM context
     fn format_constraints(constraints: &super::schema_summary::PlannerConstraints) -> String {
         let mut result = String::new();
-        
+
         if constraints.max_select_fields > 0 {
-            result.push_str(&format!("- Maximum {} select fields\n", constraints.max_select_fields));
+            result.push_str(&format!(
+                "- Maximum {} select fields\n",
+                constraints.max_select_fields
+            ));
         }
         if constraints.max_filters > 0 {
             result.push_str(&format!("- Maximum {} filters\n", constraints.max_filters));
         }
         if !constraints.forbidden_patterns.is_empty() {
-            result.push_str(&format!("- Forbidden patterns: {}\n", constraints.forbidden_patterns.join(", ")));
+            result.push_str(&format!(
+                "- Forbidden patterns: {}\n",
+                constraints.forbidden_patterns.join(", ")
+            ));
         }
-        
+
         result
     }
 }

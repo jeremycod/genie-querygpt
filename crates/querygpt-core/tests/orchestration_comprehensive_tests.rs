@@ -1,11 +1,11 @@
+use querygpt_core::dsl::report_spec::{Filter, FilterOp, Mode, ReportSpec, SelectItem};
 use querygpt_core::planner::{
-    orchestration::{Orchestrator, OrchestrationResult},
     confirmation::AutoApproveConfirmation,
     fixture_planner::FixturePlanner,
+    orchestration::{OrchestrationResult, Orchestrator},
     planner::PlannerContext,
 };
 use querygpt_core::schema::registry::SchemaRegistry;
-use querygpt_core::dsl::report_spec::{ReportSpec, SelectItem, Filter, FilterOp, Mode};
 
 mod common;
 use common::FakePlannerWithRevision;
@@ -14,12 +14,12 @@ fn load_test_registry() -> SchemaRegistry {
     // Use absolute path to avoid working directory issues with concurrent tests
     let crate_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo_root = crate_root
-        .parent().and_then(|p| p.parent())
+        .parent()
+        .and_then(|p| p.parent())
         .expect("resolve repo root from CARGO_MANIFEST_DIR");
     let index_path = repo_root.join("config/workspaces/campaigns_offers.index.json");
 
-    SchemaRegistry::load(index_path.to_str().unwrap())
-        .expect("load test schema registry")
+    SchemaRegistry::load(index_path.to_str().unwrap()).expect("load test schema registry")
 }
 
 #[tokio::test]
@@ -58,7 +58,12 @@ async fn orchestration_success_path_with_fixture_planner() {
 
     // Should succeed with valid spec
     match result {
-        OrchestrationResult::Success { plan, draft, diffs: _, trace } => {
+        OrchestrationResult::Success {
+            plan,
+            draft,
+            diffs: _,
+            trace,
+        } => {
             assert!(draft.is_some());
             assert_eq!(plan.workspace, "campaigns_offers");
             assert!(trace.is_some());
@@ -115,7 +120,12 @@ async fn orchestration_revision_loop_with_fake_planner() {
 
     // Should succeed after revision
     match result {
-        OrchestrationResult::Success { plan, draft, diffs: _, trace } => {
+        OrchestrationResult::Success {
+            plan,
+            draft,
+            diffs: _,
+            trace,
+        } => {
             assert!(draft.is_some());
             assert_eq!(plan.workspace, "campaigns_offers");
             // Trace should show that a revision occurred
@@ -163,7 +173,11 @@ async fn orchestration_max_attempts_exceeded() {
 
     // Should fail after max attempts
     match result {
-        OrchestrationResult::RetryLimitExceeded { diagnostics, draft: _, attempts } => {
+        OrchestrationResult::RetryLimitExceeded {
+            diagnostics,
+            draft: _,
+            attempts,
+        } => {
             assert!(!diagnostics.errors.is_empty());
             assert_eq!(attempts, 3); // Default max attempts
         }
@@ -199,7 +213,12 @@ async fn orchestration_compile_only_path() {
 
     // Should succeed
     match result {
-        OrchestrationResult::Success { plan, draft, diffs, trace } => {
+        OrchestrationResult::Success {
+            plan,
+            draft,
+            diffs,
+            trace,
+        } => {
             assert!(draft.is_none()); // No draft in compile-only mode
             assert!(diffs.is_empty()); // No diffs in compile-only mode
             assert!(trace.is_none()); // No trace in compile-only mode

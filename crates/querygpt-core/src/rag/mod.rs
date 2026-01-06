@@ -1,2 +1,2 @@
-pub mod retrieval;
 pub mod prompt;
+pub mod retrieval;

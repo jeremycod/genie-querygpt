@@ -20,10 +20,11 @@ fn parses_and_validates_example_spec() {
 #[test]
 fn rejects_unknown_field_in_select() {
     let mut spec = load_fixture("campaigns_offers_prepaid_apac.json");
-    spec.select.push(querygpt_core::dsl::report_spec::SelectItem {
-        field: "does_not_exist".into(),
-        alias: None,
-    });
+    spec.select
+        .push(querygpt_core::dsl::report_spec::SelectItem {
+            field: "does_not_exist".into(),
+            alias: None,
+        });
 
     let ws = campaigns_offers_schema();
     let err = validate_report_spec(&spec, Some(&ws)).unwrap_err();

@@ -1,4 +1,4 @@
-use super::planner::{Planner, PlannerContext, PlannerResult, PlannerError, ReportSpecDraft};
+use super::planner::{Planner, PlannerContext, PlannerError, PlannerResult, ReportSpecDraft};
 use crate::compile::diagnostics::CompilerDiagnostics;
 use crate::dsl::report_spec::ReportSpec;
 use std::collections::HashMap;

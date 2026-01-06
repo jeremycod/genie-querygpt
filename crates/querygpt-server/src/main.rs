@@ -1,7 +1,7 @@
 use axum::{routing::post, Json, Router};
-use serde::{Deserialize, Serialize};
 use querygpt_core::agents::intent;
 use querygpt_core::schema::registry::SchemaRegistry;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 struct GenerateRequest {
@@ -31,11 +31,11 @@ async fn generate(Json(req): Json<GenerateRequest>) -> Json<GenerateResponse> {
 async fn main() {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt().init();
-    
+
     let host = std::env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port = std::env::var("SERVER_PORT").unwrap_or_else(|_| "8080".to_string());
     let bind_addr = format!("{}:{}", host, port);
-    
+
     let app = Router::new().route("/generate", post(generate));
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
     println!("Server running on {}", bind_addr);

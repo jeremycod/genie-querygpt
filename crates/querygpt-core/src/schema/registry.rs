@@ -24,7 +24,8 @@ impl SchemaRegistry {
                 .and_then(|p| p.parent()) // config
                 .and_then(|p| p.parent()) // repo root
                 .unwrap_or_else(|| std::path::Path::new("."));
-            repo_root.join(&index.schema_cards_path)
+            repo_root
+                .join(&index.schema_cards_path)
                 .to_str()
                 .unwrap()
                 .to_string()

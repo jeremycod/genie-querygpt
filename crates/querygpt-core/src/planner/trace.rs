@@ -1,5 +1,5 @@
-use std::time::SystemTime;
 use crate::compile::diagnostics::CompilerDiagnostics;
+use std::time::SystemTime;
 
 /// Trace information for planner operations
 #[derive(Debug, Clone)]
@@ -67,7 +67,10 @@ impl FlowLogger {
 
     pub fn compiler_diagnostics(diagnostics: &CompilerDiagnostics) {
         if diagnostics.has_errors() {
-            println!("[flow] compiler diagnostics: {} errors", diagnostics.errors.len());
+            println!(
+                "[flow] compiler diagnostics: {} errors",
+                diagnostics.errors.len()
+            );
         }
     }
 

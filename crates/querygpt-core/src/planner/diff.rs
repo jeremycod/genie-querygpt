@@ -20,12 +20,12 @@ pub enum ChangeType {
 /// Generate structured diff between two ReportSpecs
 pub fn diff_report_specs(original: &ReportSpec, revised: &ReportSpec) -> Vec<SpecDiff> {
     let mut diffs = Vec::new();
-    
+
     let original_json = serde_json::to_value(original).unwrap();
     let revised_json = serde_json::to_value(revised).unwrap();
-    
+
     compare_json_values("", &original_json, &revised_json, &mut diffs);
-    
+
     diffs
 }
 
@@ -44,7 +44,7 @@ fn compare_json_values(
                 } else {
                     format!("{}.{}", path, key)
                 };
-                
+
                 match rev_map.get(key) {
                     Some(rev_val) => {
                         if orig_val != rev_val {
@@ -61,7 +61,7 @@ fn compare_json_values(
                     }
                 }
             }
-            
+
             // Check for added fields
             for (key, rev_val) in rev_map {
                 if !orig_map.contains_key(key) {
@@ -70,7 +70,7 @@ fn compare_json_values(
                     } else {
                         format!("{}.{}", path, key)
                     };
-                    
+
                     diffs.push(SpecDiff {
                         field_path,
                         change_type: ChangeType::Added,
@@ -108,22 +108,24 @@ pub fn format_diff_display(diffs: &[SpecDiff]) -> String {
     if diffs.is_empty() {
         return "No changes detected.".to_string();
     }
-    
+
     let mut output = String::new();
     output.push_str("Changes to ReportSpec:\n");
     output.push_str("=====================\n\n");
-    
+
     for diff in diffs {
         match diff.change_type {
             ChangeType::Added => {
-                output.push_str(&format!("+ Added {}: {}\n", 
-                    diff.field_path, 
+                output.push_str(&format!(
+                    "+ Added {}: {}\n",
+                    diff.field_path,
                     format_value(&diff.new_value)
                 ));
             }
             ChangeType::Removed => {
-                output.push_str(&format!("- Removed {}: {}\n", 
-                    diff.field_path, 
+                output.push_str(&format!(
+                    "- Removed {}: {}\n",
+                    diff.field_path,
                     format_value(&diff.old_value)
                 ));
             }
@@ -135,7 +137,7 @@ pub fn format_diff_display(diffs: &[SpecDiff]) -> String {
         }
         output.push('\n');
     }
-    
+
     output
 }
 
@@ -172,7 +174,7 @@ mod tests {
             mode: Mode::Preview,
             pagination: None,
         };
-        
+
         let diffs = diff_report_specs(&spec, &spec);
         assert!(diffs.is_empty());
     }
@@ -191,7 +193,7 @@ mod tests {
             mode: Mode::Preview,
             pagination: None,
         };
-        
+
         let revised = ReportSpec {
             version: 1,
             workspace: "test".to_string(),
@@ -204,10 +206,10 @@ mod tests {
             mode: Mode::Export,
             pagination: None,
         };
-        
+
         let diffs = diff_report_specs(&original, &revised);
         assert!(!diffs.is_empty());
-        
+
         // Should detect mode change and select field change
         let mode_diff = diffs.iter().find(|d| d.field_path == "mode");
         assert!(mode_diff.is_some());
@@ -216,15 +218,13 @@ mod tests {
 
     #[test]
     fn format_diff_display_works() {
-        let diffs = vec![
-            SpecDiff {
-                field_path: "mode".to_string(),
-                change_type: ChangeType::Modified,
-                old_value: Some(serde_json::Value::String("preview".to_string())),
-                new_value: Some(serde_json::Value::String("export".to_string())),
-            }
-        ];
-        
+        let diffs = vec![SpecDiff {
+            field_path: "mode".to_string(),
+            change_type: ChangeType::Modified,
+            old_value: Some(serde_json::Value::String("preview".to_string())),
+            new_value: Some(serde_json::Value::String("export".to_string())),
+        }];
+
         let display = format_diff_display(&diffs);
         assert!(display.contains("Changes to ReportSpec"));
         assert!(display.contains("Modified mode"));

@@ -1,6 +1,6 @@
+use crate::dsl::validate::SpecError;
 use serde::Serialize;
 use thiserror::Error;
-use crate::dsl::validate::SpecError;
 
 #[derive(Debug, Error)]
 pub enum CompileError {
@@ -21,7 +21,7 @@ pub enum CompilerError {
     #[error("unknown field {field} in {context}")]
     UnknownField {
         field: String,
-        context: &'static str
+        context: &'static str,
     },
 
     #[error("invalid join: {reason}")]
@@ -359,20 +359,28 @@ impl From<CompilerError> for CompileDiagnostics {
 // Conversion from legacy to new diagnostics
 impl From<CompileDiagnostics> for CompilerDiagnostics {
     fn from(legacy: CompileDiagnostics) -> Self {
-        let errors = legacy.diagnostics.into_iter().map(|d| Diagnostic {
-            code: d.code,
-            message: d.message,
-            spans: if let Some(field) = &d.field {
-                vec![Span {
-                    pointer: format!("/{}/{}", d.context.as_deref().unwrap_or("unknown"), field),
-                }]
-            } else {
-                vec![]
-            },
-            details: d.detail.unwrap_or(serde_json::Value::Null),
-            help: vec![], // Legacy diagnostics don't have help
-        }).collect();
-        
+        let errors = legacy
+            .diagnostics
+            .into_iter()
+            .map(|d| Diagnostic {
+                code: d.code,
+                message: d.message,
+                spans: if let Some(field) = &d.field {
+                    vec![Span {
+                        pointer: format!(
+                            "/{}/{}",
+                            d.context.as_deref().unwrap_or("unknown"),
+                            field
+                        ),
+                    }]
+                } else {
+                    vec![]
+                },
+                details: d.detail.unwrap_or(serde_json::Value::Null),
+                help: vec![], // Legacy diagnostics don't have help
+            })
+            .collect();
+
         Self {
             errors,
             warnings: vec![],
@@ -396,54 +404,46 @@ impl From<CompilerError> for CompilerDiagnostics {
             CompilerError::SchemaMismatch { expected, found } => {
                 CompilerDiagnostics::schema_mismatch(expected, found)
             }
-            CompilerError::InvalidJoin { reason } => {
-                CompilerDiagnostics::invalid_join(reason)
-            }
+            CompilerError::InvalidJoin { reason } => CompilerDiagnostics::invalid_join(reason),
             CompilerError::UnknownField { field, context } => {
                 CompilerDiagnostics::unknown_field(field, context)
             }
-            CompilerError::InvalidProjection { field } => {
-                CompilerDiagnostics::error(Diagnostic {
-                    code: DiagnosticCode::InvalidProjection,
-                    message: format!("invalid projection for field '{field}'"),
-                    spans: vec![Span {
-                        pointer: format!("/select/{}", field.replace('.', "/")),
-                    }],
-                    details: serde_json::json!({ "field": field }),
-                    help: vec![
-                        "Check that the field is selectable".to_string(),
-                        "Verify field exists in the schema".to_string(),
-                    ],
-                })
-            }
-            CompilerError::InvalidFilter { field } => {
-                CompilerDiagnostics::error(Diagnostic {
-                    code: DiagnosticCode::InvalidFilter,
-                    message: format!("invalid filter on field '{field}'"),
-                    spans: vec![Span {
-                        pointer: format!("/filters/{}", field.replace('.', "/")),
-                    }],
-                    details: serde_json::json!({ "field": field }),
-                    help: vec![
-                        "Check that the field is filterable".to_string(),
-                        "Verify the filter operator is valid for this field type".to_string(),
-                    ],
-                })
-            }
-            CompilerError::InvalidOrderBy { field } => {
-                CompilerDiagnostics::error(Diagnostic {
-                    code: DiagnosticCode::InvalidOrderBy,
-                    message: format!("invalid ordering on field '{field}'"),
-                    spans: vec![Span {
-                        pointer: format!("/order_by/{}", field.replace('.', "/")),
-                    }],
-                    details: serde_json::json!({ "field": field }),
-                    help: vec![
-                        "Check that the field is sortable".to_string(),
-                        "Verify field exists in the schema".to_string(),
-                    ],
-                })
-            }
+            CompilerError::InvalidProjection { field } => CompilerDiagnostics::error(Diagnostic {
+                code: DiagnosticCode::InvalidProjection,
+                message: format!("invalid projection for field '{field}'"),
+                spans: vec![Span {
+                    pointer: format!("/select/{}", field.replace('.', "/")),
+                }],
+                details: serde_json::json!({ "field": field }),
+                help: vec![
+                    "Check that the field is selectable".to_string(),
+                    "Verify field exists in the schema".to_string(),
+                ],
+            }),
+            CompilerError::InvalidFilter { field } => CompilerDiagnostics::error(Diagnostic {
+                code: DiagnosticCode::InvalidFilter,
+                message: format!("invalid filter on field '{field}'"),
+                spans: vec![Span {
+                    pointer: format!("/filters/{}", field.replace('.', "/")),
+                }],
+                details: serde_json::json!({ "field": field }),
+                help: vec![
+                    "Check that the field is filterable".to_string(),
+                    "Verify the filter operator is valid for this field type".to_string(),
+                ],
+            }),
+            CompilerError::InvalidOrderBy { field } => CompilerDiagnostics::error(Diagnostic {
+                code: DiagnosticCode::InvalidOrderBy,
+                message: format!("invalid ordering on field '{field}'"),
+                spans: vec![Span {
+                    pointer: format!("/order_by/{}", field.replace('.', "/")),
+                }],
+                details: serde_json::json!({ "field": field }),
+                help: vec![
+                    "Check that the field is sortable".to_string(),
+                    "Verify field exists in the schema".to_string(),
+                ],
+            }),
         }
     }
 }

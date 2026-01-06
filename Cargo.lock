@@ -1187,6 +1187,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "querygpt-compiler"
+version = "0.1.0"
+dependencies = [
+ "querygpt-core",
+]
+
+[[package]]
 name = "querygpt-core"
 version = "0.1.0"
 dependencies = [

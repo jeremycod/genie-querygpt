@@ -9,7 +9,10 @@ pub enum SpecError {
     WorkspaceNotFound(String),
 
     #[error("unknown field '{field}' in {context}")]
-    UnknownField { field: String, context: &'static str },
+    UnknownField {
+        field: String,
+        context: &'static str,
+    },
 
     #[error("field '{field}' is not selectable")]
     NotSelectable { field: String },
@@ -34,7 +37,10 @@ pub enum SpecError {
     ExportSelectEmpty,
 }
 
-pub fn validate_report_spec(spec: &ReportSpec, ws: Option<&WorkspaceSchema>) -> Result<(), SpecError> {
+pub fn validate_report_spec(
+    spec: &ReportSpec,
+    ws: Option<&WorkspaceSchema>,
+) -> Result<(), SpecError> {
     let ws = ws.ok_or_else(|| SpecError::WorkspaceNotFound(spec.workspace.clone()))?;
 
     if matches!(spec.mode, Mode::Export) && spec.select.is_empty() {
@@ -60,13 +66,18 @@ pub fn validate_report_spec(spec: &ReportSpec, ws: Option<&WorkspaceSchema>) -> 
 
     // Validate filters
     for f in &spec.filters {
-        let def = ws.fields.get(&f.field).ok_or_else(|| SpecError::UnknownField {
-            field: f.field.clone(),
-            context: "filters",
-        })?;
+        let def = ws
+            .fields
+            .get(&f.field)
+            .ok_or_else(|| SpecError::UnknownField {
+                field: f.field.clone(),
+                context: "filters",
+            })?;
 
         if !def.filterable {
-            return Err(SpecError::NotFilterable { field: f.field.clone() });
+            return Err(SpecError::NotFilterable {
+                field: f.field.clone(),
+            });
         }
 
         validate_filter_op(&f.field, def.field_type, f.op)?;
@@ -75,13 +86,18 @@ pub fn validate_report_spec(spec: &ReportSpec, ws: Option<&WorkspaceSchema>) -> 
 
     // Validate order_by
     for ob in &spec.order_by {
-        let def = ws.fields.get(&ob.field).ok_or_else(|| SpecError::UnknownField {
-            field: ob.field.clone(),
-            context: "order_by",
-        })?;
+        let def = ws
+            .fields
+            .get(&ob.field)
+            .ok_or_else(|| SpecError::UnknownField {
+                field: ob.field.clone(),
+                context: "order_by",
+            })?;
 
         if !def.sortable {
-            return Err(SpecError::NotSortable { field: ob.field.clone() });
+            return Err(SpecError::NotSortable {
+                field: ob.field.clone(),
+            });
         }
     }
 
@@ -119,27 +135,67 @@ fn validate_filter_op(field: &str, ty: FieldType, op: FilterOp) -> Result<(), Sp
     }
 }
 
-fn validate_filter_value(field: &str, ty: FieldType, v: &Value, op: FilterOp) -> Result<(), SpecError> {
+fn validate_filter_value(
+    field: &str,
+    ty: FieldType,
+    v: &Value,
+    op: FilterOp,
+) -> Result<(), SpecError> {
     use FieldType::*;
     use FilterOp::*;
 
-    let err = |reason: &str| Err(SpecError::InvalidValue { field: field.to_string(), reason: reason.to_string() });
+    let err = |reason: &str| {
+        Err(SpecError::InvalidValue {
+            field: field.to_string(),
+            reason: reason.to_string(),
+        })
+    };
 
     match (ty, op) {
-        (String | Enum, Eq) => v.as_str().map(|_| ()).ok_or_else(|| SpecError::InvalidValue { field: field.to_string(), reason: "expected string".to_string() })?,
-        (Bool, Eq) => v.as_bool().map(|_| ()).ok_or_else(|| SpecError::InvalidValue { field: field.to_string(), reason: "expected boolean".to_string() })?,
-        (Number, Eq) => v.as_f64().map(|_| ()).ok_or_else(|| SpecError::InvalidValue { field: field.to_string(), reason: "expected number".to_string() })?,
-        (Date, Eq) => v.as_str().map(|_| ()).ok_or_else(|| SpecError::InvalidValue { field: field.to_string(), reason: "expected date string".to_string() })?,
+        (String | Enum, Eq) => v
+            .as_str()
+            .map(|_| ())
+            .ok_or_else(|| SpecError::InvalidValue {
+                field: field.to_string(),
+                reason: "expected string".to_string(),
+            })?,
+        (Bool, Eq) => v
+            .as_bool()
+            .map(|_| ())
+            .ok_or_else(|| SpecError::InvalidValue {
+                field: field.to_string(),
+                reason: "expected boolean".to_string(),
+            })?,
+        (Number, Eq) => v
+            .as_f64()
+            .map(|_| ())
+            .ok_or_else(|| SpecError::InvalidValue {
+                field: field.to_string(),
+                reason: "expected number".to_string(),
+            })?,
+        (Date, Eq) => v
+            .as_str()
+            .map(|_| ())
+            .ok_or_else(|| SpecError::InvalidValue {
+                field: field.to_string(),
+                reason: "expected date string".to_string(),
+            })?,
 
         (String | Enum | Number | Date, In) => {
-            let arr = v.as_array().ok_or_else(|| SpecError::InvalidValue { field: field.to_string(), reason: "expected array for 'in'".to_string() })?;
+            let arr = v.as_array().ok_or_else(|| SpecError::InvalidValue {
+                field: field.to_string(),
+                reason: "expected array for 'in'".to_string(),
+            })?;
             if arr.is_empty() {
                 return err("array for 'in' must not be empty");
             }
         }
 
         (StringArray, Overlaps) => {
-            let arr = v.as_array().ok_or_else(|| SpecError::InvalidValue { field: field.to_string(), reason: "expected array for 'overlaps'".to_string() })?;
+            let arr = v.as_array().ok_or_else(|| SpecError::InvalidValue {
+                field: field.to_string(),
+                reason: "expected array for 'overlaps'".to_string(),
+            })?;
             if arr.is_empty() {
                 return err("array for 'overlaps' must not be empty");
             }
@@ -148,8 +204,18 @@ fn validate_filter_value(field: &str, ty: FieldType, v: &Value, op: FilterOp) ->
         (Number | Date, Gte | Lte) => {
             // simplest: accept string for Date and number for Number
             match ty {
-                Number => { v.as_f64().ok_or_else(|| SpecError::InvalidValue { field: field.to_string(), reason: "expected number".to_string() })?; }
-                Date => { v.as_str().ok_or_else(|| SpecError::InvalidValue { field: field.to_string(), reason: "expected date string".to_string() })?; }
+                Number => {
+                    v.as_f64().ok_or_else(|| SpecError::InvalidValue {
+                        field: field.to_string(),
+                        reason: "expected number".to_string(),
+                    })?;
+                }
+                Date => {
+                    v.as_str().ok_or_else(|| SpecError::InvalidValue {
+                        field: field.to_string(),
+                        reason: "expected date string".to_string(),
+                    })?;
+                }
                 _ => {}
             }
         }

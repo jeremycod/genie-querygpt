@@ -74,8 +74,8 @@ pub struct JoinGraph {
 pub struct JoinEdge {
     pub from: String,
     pub to: String,
-    pub join_type: String, // "inner" | "left"
-    pub on: Vec<String>,   // list of equality predicates as strings
+    pub join_type: String,   // "inner" | "left"
+    pub on: Vec<String>,     // list of equality predicates as strings
     pub cardinality: String, // "1:1" | "1:n" | "n:1" | "n:n"
     pub safe: bool,
     pub notes: Vec<String>,

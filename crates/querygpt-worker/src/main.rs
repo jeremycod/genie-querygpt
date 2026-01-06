@@ -10,9 +10,8 @@ async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt().init();
 
-    let db_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
-    
+    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
     let refresh_interval = std::env::var("REFRESH_INTERVAL_SECONDS")
         .unwrap_or_else(|_| "60".to_string())
         .parse::<u64>()
@@ -38,21 +37,22 @@ async fn main() -> anyhow::Result<()> {
 
     // Simple periodic refresh instead of notification-based
     let refresh_interval = Duration::from_secs(refresh_interval);
-    
+
     loop {
         tokio::time::sleep(refresh_interval).await;
-        
+
         // Refresh all MVs periodically
         for mv in [
             "offers_latest",
-            "campaigns_latest", 
+            "campaigns_latest",
             "products_latest",
             "discounts_latest",
             "skus_latest",
         ] {
             match client
                 .batch_execute(&format!("REFRESH MATERIALIZED VIEW CONCURRENTLY {mv};"))
-                .await {
+                .await
+            {
                 Ok(_) => tracing::info!("Successfully refreshed {mv}"),
                 Err(e) => tracing::error!("Failed to refresh {mv}: {e}"),
             }

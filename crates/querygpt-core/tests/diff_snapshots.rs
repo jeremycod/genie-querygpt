@@ -1,5 +1,7 @@
+use querygpt_core::dsl::report_spec::{
+    Filter, FilterOp, Mode, OrderBy, PaginationSpec, ReportSpec, SelectItem, SortDir,
+};
 use querygpt_core::planner::diff::{diff_report_specs, format_diff_display};
-use querygpt_core::dsl::report_spec::{ReportSpec, SelectItem, Filter, OrderBy, FilterOp, SortDir, Mode, PaginationSpec};
 
 #[test]
 fn snapshot_diff_no_changes() {

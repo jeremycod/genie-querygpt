@@ -1,6 +1,6 @@
-use crate::dsl::report_spec::ReportSpec;
+use super::schema_summary::{ExamplePair, PlannerConstraints, SchemaSummary};
 use crate::compile::diagnostics::CompilerDiagnostics;
-use super::schema_summary::{SchemaSummary, ExamplePair, PlannerConstraints};
+use crate::dsl::report_spec::ReportSpec;
 use serde::{Deserialize, Serialize};
 
 /// Phase B Planner Interface - Strict boundary for AI behavior
@@ -38,7 +38,11 @@ pub struct PlannerContext {
 
 impl PlannerContext {
     /// Create a simple context for testing (backward compatible)
-    pub fn simple(workspace: String, available_fields: Vec<String>, available_tables: Vec<String>) -> Self {
+    pub fn simple(
+        workspace: String,
+        available_fields: Vec<String>,
+        available_tables: Vec<String>,
+    ) -> Self {
         let schema_summary = SchemaSummary::minimal(&workspace);
         Self {
             workspace: workspace.clone(),
@@ -50,7 +54,7 @@ impl PlannerContext {
             available_tables,
         }
     }
-    
+
     /// Create an enhanced context with full schema summary
     pub fn enhanced(
         workspace: String,
@@ -60,7 +64,7 @@ impl PlannerContext {
     ) -> Self {
         let available_fields = schema_summary.get_all_fields();
         let available_tables = schema_summary.get_all_tables();
-        
+
         Self {
             workspace,
             schema_summary,

@@ -1,4 +1,4 @@
-use crate::planner::diff::{SpecDiff, format_diff_display};
+use crate::planner::diff::{format_diff_display, SpecDiff};
 use std::io::{self, Write};
 
 /// User confirmation result
@@ -23,13 +23,13 @@ impl UserConfirmation for InteractiveConfirmation {
         if diffs.is_empty() {
             return ConfirmationResult::Approved;
         }
-        
+
         println!("{}", format_confirmation_prompt(diffs, attempt));
-        
+
         loop {
             print!("Your choice [A/R/M]: ");
             io::stdout().flush().unwrap();
-            
+
             let mut input = String::new();
             match io::stdin().read_line(&mut input) {
                 Ok(_) => {
@@ -42,7 +42,9 @@ impl UserConfirmation for InteractiveConfirmation {
                             io::stdout().flush().unwrap();
                             let mut feedback = String::new();
                             if io::stdin().read_line(&mut feedback).is_ok() {
-                                return ConfirmationResult::RequestRevision(feedback.trim().to_string());
+                                return ConfirmationResult::RequestRevision(
+                                    feedback.trim().to_string(),
+                                );
                             }
                         }
                         _ => {
@@ -97,7 +99,7 @@ impl UserConfirmation for ConsoleConfirmation {
         if diffs.is_empty() {
             return ConfirmationResult::Approved;
         }
-        
+
         // Simulate user behavior: approve on first attempt, reject on subsequent
         if attempt == 1 {
             ConfirmationResult::Approved
@@ -110,36 +112,40 @@ impl UserConfirmation for ConsoleConfirmation {
 /// Format confirmation prompt for display
 pub fn format_confirmation_prompt(diffs: &[SpecDiff], attempt: usize) -> String {
     let mut prompt = String::new();
-    
+
     if attempt > 1 {
         prompt.push_str(&format!("Retry attempt #{}\n\n", attempt));
     }
-    
+
     prompt.push_str(&format_diff_display(diffs));
     prompt.push_str("\nDo you want to proceed with these changes?\n");
     prompt.push_str("Options:\n");
     prompt.push_str("  [A]pprove - Accept the changes\n");
     prompt.push_str("  [R]eject  - Reject the changes\n");
     prompt.push_str("  [M]odify  - Request modifications\n");
-    
+
     prompt
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planner::diff::{SpecDiff, ChangeType};
+    use crate::planner::diff::{ChangeType, SpecDiff};
 
     #[test]
     fn mock_confirmation_approves_when_configured() {
-        let confirmation = MockConfirmation { should_approve: true };
+        let confirmation = MockConfirmation {
+            should_approve: true,
+        };
         let result = confirmation.confirm_changes(&[], 1);
         assert_eq!(result, ConfirmationResult::Approved);
     }
 
     #[test]
     fn mock_confirmation_rejects_when_configured() {
-        let confirmation = MockConfirmation { should_approve: false };
+        let confirmation = MockConfirmation {
+            should_approve: false,
+        };
         let result = confirmation.confirm_changes(&[], 1);
         assert_eq!(result, ConfirmationResult::Rejected);
     }
@@ -153,15 +159,13 @@ mod tests {
 
     #[test]
     fn format_confirmation_prompt_includes_attempt_number() {
-        let diffs = vec![
-            SpecDiff {
-                field_path: "mode".to_string(),
-                change_type: ChangeType::Modified,
-                old_value: Some(serde_json::Value::String("preview".to_string())),
-                new_value: Some(serde_json::Value::String("export".to_string())),
-            }
-        ];
-        
+        let diffs = vec![SpecDiff {
+            field_path: "mode".to_string(),
+            change_type: ChangeType::Modified,
+            old_value: Some(serde_json::Value::String("preview".to_string())),
+            new_value: Some(serde_json::Value::String("export".to_string())),
+        }];
+
         let prompt = format_confirmation_prompt(&diffs, 2);
         assert!(prompt.contains("Retry attempt #2"));
         assert!(prompt.contains("Do you want to proceed"));

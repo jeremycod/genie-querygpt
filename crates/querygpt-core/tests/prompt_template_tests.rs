@@ -1,11 +1,11 @@
+use querygpt_core::compile::diagnostics::CompilerDiagnostics;
+use querygpt_core::dsl::report_spec::{Mode, ReportSpec, SelectItem};
 use querygpt_core::planner::{
-    prompt_templates::PromptTemplates,
-    planner::{PlannerContext, Planner},
     llm_planner::LlmPlanner,
     mock_client::MockClient,
+    planner::{Planner, PlannerContext},
+    prompt_templates::PromptTemplates,
 };
-use querygpt_core::dsl::report_spec::{ReportSpec, SelectItem, Mode};
-use querygpt_core::compile::diagnostics::CompilerDiagnostics;
 
 #[test]
 fn system_prompt_includes_required_elements() {
@@ -14,9 +14,9 @@ fn system_prompt_includes_required_elements() {
         vec!["offer_id".to_string(), "region".to_string()],
         vec!["offers".to_string()],
     );
-    
+
     let prompt = PromptTemplates::system_prompt(&ctx);
-    
+
     assert!(prompt.contains("test_workspace"));
     assert!(prompt.contains("SCHEMA SUMMARY:"));
     assert!(prompt.contains("REQUIRED OUTPUT FORMAT"));
@@ -32,7 +32,7 @@ fn revision_prompt_includes_error_context() {
         vec!["offer_id".to_string()],
         vec!["offers".to_string()],
     );
-    
+
     let spec = ReportSpec {
         version: 1,
         workspace: "test".to_string(),
@@ -45,12 +45,12 @@ fn revision_prompt_includes_error_context() {
         mode: Mode::Preview,
         pagination: None,
     };
-    
+
     let diagnostics = CompilerDiagnostics::new();
     let original_prompt = "test prompt";
-    
+
     let prompt = PromptTemplates::revision_prompt(original_prompt, &spec, &diagnostics, &ctx);
-    
+
     assert!(prompt.contains("Previous attempt failed"));
     assert!(prompt.contains("test prompt"));
     assert!(prompt.contains("invalid_field"));
@@ -61,15 +61,15 @@ fn revision_prompt_includes_error_context() {
 fn user_prompt_formats_natural_language() {
     let nl = "Show me all offers in APAC";
     let prompt = PromptTemplates::user_prompt(nl);
-    
+
     assert!(prompt.contains("Generate a ReportSpec"));
     assert!(prompt.contains("Show me all offers in APAC"));
 }
 
 #[tokio::test]
 async fn json_parsing_handles_valid_response() {
-    let mock_client = MockClient::new()
-        .with_default_response(r#"{
+    let mock_client = MockClient::new().with_default_response(
+        r#"{
             "report_spec": {
                 "version": 1,
                 "workspace": "test",
@@ -82,41 +82,42 @@ async fn json_parsing_handles_valid_response() {
             "assumptions": ["Test assumption"],
             "open_questions": [],
             "notes": "Test response"
-        }"#.to_string());
-    
+        }"#
+        .to_string(),
+    );
+
     let planner = LlmPlanner::new(Box::new(mock_client), "test-model".to_string());
-    
+
     let ctx = PlannerContext::simple(
         "test".to_string(),
         vec!["offer_id".to_string()],
         vec!["offers".to_string()],
     );
-    
+
     let result = planner.suggest_report_spec("test", ctx).await;
     assert!(result.is_ok());
 }
 
 #[tokio::test]
 async fn json_parsing_rejects_invalid_response() {
-    let mock_client = MockClient::new()
-        .with_default_response("This is not JSON".to_string());
-    
+    let mock_client = MockClient::new().with_default_response("This is not JSON".to_string());
+
     let planner = LlmPlanner::new(Box::new(mock_client), "test-model".to_string());
-    
+
     let ctx = PlannerContext::simple(
         "test".to_string(),
         vec!["offer_id".to_string()],
         vec!["offers".to_string()],
     );
-    
+
     let result = planner.suggest_report_spec("test", ctx).await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn json_parsing_extracts_json_from_mixed_content() {
-    let mock_client = MockClient::new()
-        .with_default_response(r#"Here's the JSON response:
+    let mock_client = MockClient::new().with_default_response(
+        r#"Here's the JSON response:
         {
             "report_spec": {
                 "version": 1,
@@ -131,17 +132,22 @@ async fn json_parsing_extracts_json_from_mixed_content() {
             "open_questions": [],
             "notes": "Test"
         }
-        That's the response."#.to_string());
-    
+        That's the response."#
+            .to_string(),
+    );
+
     let planner = LlmPlanner::new(Box::new(mock_client), "test-model".to_string());
-    
+
     let ctx = PlannerContext::simple(
         "test".to_string(),
         vec!["offer_id".to_string()],
         vec!["offers".to_string()],
     );
-    
+
     let result = planner.suggest_report_spec("test", ctx).await;
     assert!(result.is_ok());
-    assert!(result.unwrap().assumptions.contains(&"Extracted from mixed content".to_string()));
+    assert!(result
+        .unwrap()
+        .assumptions
+        .contains(&"Extracted from mixed content".to_string()));
 }
