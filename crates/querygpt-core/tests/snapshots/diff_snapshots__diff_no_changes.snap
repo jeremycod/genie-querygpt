@@ -1,0 +1,5 @@
+---
+source: crates/querygpt-core/tests/diff_snapshots.rs
+expression: display
+---
+No changes detected.

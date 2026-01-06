@@ -1,0 +1,26 @@
+---
+source: crates/querygpt-core/tests/diff_snapshots.rs
+expression: display
+---
+Changes to ReportSpec:
+=====================
+
+~ Modified filters:
+  - [1 items]
+  + [2 items]
+
+~ Modified mode:
+  - "preview"
+  + "export"
+
+~ Modified order_by:
+  - [0 items]
+  + [1 items]
+
+~ Modified pagination:
+  - null
+  + {object}
+
+~ Modified select:
+  - [2 items]
+  + [2 items]

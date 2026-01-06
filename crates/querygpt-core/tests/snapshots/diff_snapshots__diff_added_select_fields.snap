@@ -1,0 +1,10 @@
+---
+source: crates/querygpt-core/tests/diff_snapshots.rs
+expression: display
+---
+Changes to ReportSpec:
+=====================
+
+~ Modified select:
+  - [1 items]
+  + [2 items]
