@@ -1,0 +1,10 @@
+---
+source: crates/querygpt-core/tests/diff_snapshots.rs
+expression: display
+---
+Changes to ReportSpec:
+=====================
+
+~ Modified mode:
+  - "preview"
+  + "export"
