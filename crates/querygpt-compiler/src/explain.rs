@@ -1,9 +1,7 @@
-use crate::dsl::plan::{IntermediatePlan, JoinCondition, JoinType, PlanJoin};
 use std::collections::HashMap;
 
-// Returns a human-readable explanation for all join relationships in an [`IntermediatePlan`].
-///
-/// The explanation is derived purely from the plan data and does not mutate the plan.
+use querygpt_core::dsl::plan::{IntermediatePlan, JoinType, PlanJoin};
+
 pub fn explain_joins(plan: &IntermediatePlan) -> String {
     let table_names = table_lookup(plan);
 
@@ -21,9 +19,6 @@ pub fn explain_joins(plan: &IntermediatePlan) -> String {
     lines.join("\n")
 }
 
-/// Returns a human-readable explanation of the filters applied in an [`IntermediatePlan`].
-///
-/// The explanation is derived purely from the plan data and does not mutate the plan.
 pub fn explain_filters(plan: &IntermediatePlan) -> String {
     if plan.filters.is_empty() {
         return "Filters:\n- No filters applied.".to_string();
@@ -38,9 +33,6 @@ pub fn explain_filters(plan: &IntermediatePlan) -> String {
     lines.join("\n")
 }
 
-/// Returns a human-readable explanation of the pagination directives in an [`IntermediatePlan`].
-///
-/// The explanation is derived purely from the plan data and does not mutate the plan.
 pub fn explain_pagination(plan: &IntermediatePlan) -> String {
     match (plan.limit, plan.offset) {
         (None, None) => "Pagination:\n- No pagination (returns all rows).".to_string(),
@@ -62,9 +54,6 @@ pub fn explain_pagination(plan: &IntermediatePlan) -> String {
     }
 }
 
-/// Produces a combined explanation that includes joins, filters, and pagination sections.
-///
-/// The explanation is derived purely from the plan data and does not mutate the plan.
 pub fn explain_plan(plan: &IntermediatePlan) -> String {
     vec![
         explain_joins(plan),
@@ -74,8 +63,7 @@ pub fn explain_plan(plan: &IntermediatePlan) -> String {
     .join("\n\n")
 }
 
-/// Formats a single join condition into a human-readable equality expression.
-pub fn format_join_condition(join_condition: &JoinCondition) -> String {
+pub fn format_join_condition(join_condition: &querygpt_core::dsl::plan::JoinCondition) -> String {
     format!(
         "{} = {}",
         join_condition.left_field, join_condition.right_field

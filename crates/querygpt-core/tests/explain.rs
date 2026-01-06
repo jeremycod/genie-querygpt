@@ -1,5 +1,9 @@
-use querygpt_core::dsl::plan::{IntermediatePlan, JoinCondition, JoinType, PlanFilter, PlanJoin, PlanProjection, PlanTable};
-use querygpt_core::explain::explain::{explain_filters, explain_joins, explain_pagination, explain_plan};
+use querygpt_core::dsl::plan::{
+    IntermediatePlan, JoinCondition, JoinType, PlanFilter, PlanJoin, PlanProjection, PlanTable,
+};
+use querygpt_core::explain::explain::{
+    explain_filters, explain_joins, explain_pagination, explain_plan,
+};
 
 fn sample_plan_with_relationships() -> IntermediatePlan {
     IntermediatePlan {

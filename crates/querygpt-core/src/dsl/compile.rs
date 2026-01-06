@@ -4,15 +4,14 @@ use crate::schema::cards::SchemaCards;
 use crate::schema::registry::SchemaRegistry;
 use std::collections::HashMap;
 
-use crate::compile::diagnostics::{CompilerDiagnostics, CompileError, CompilerError};
+use crate::compile::diagnostics::{CompileError, CompilerDiagnostics, CompilerError};
 use crate::dsl::plan::PlanFilter;
 use crate::dsl::report_spec::{Filter, FilterOp};
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::dsl::plan::{PlanProjection};
+use crate::dsl::plan::PlanProjection;
 use crate::dsl::report_spec::SelectItem;
-
 
 use crate::dsl::plan::{PlanOrder, SortDirection};
 use crate::dsl::report_spec::{OrderBy, SortDir};

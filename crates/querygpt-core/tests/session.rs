@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-    use std::rc::Rc;
     use querygpt_core::dsl::report_spec::ReportSpec;
     use querygpt_core::planner::session::PlannerSession;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
     fn make_spec(workspace: &str, field: &str, limit: i64) -> ReportSpec {
         ReportSpec {

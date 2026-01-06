@@ -1,3 +1,5 @@
 /target/
 /.env
 /.vscode/launch.json
+/.claude/
+/CLAUDE.md

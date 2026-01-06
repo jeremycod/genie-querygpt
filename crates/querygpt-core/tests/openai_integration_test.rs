@@ -1,11 +1,11 @@
+use querygpt_core::planner::llm::{LlmClient, LlmMessage, LlmRequest, LlmRole};
 use querygpt_core::planner::openai_client::OpenAIClient;
-use querygpt_core::planner::llm::{LlmClient, LlmRequest, LlmMessage, LlmRole};
 
 #[tokio::test]
 #[ignore] // Requires OPENAI_API_KEY
 async fn test_openai_client_integration() {
     let client = OpenAIClient::from_env().expect("OPENAI_API_KEY not set");
-    
+
     let request = LlmRequest {
         messages: vec![
             LlmMessage {
@@ -24,7 +24,7 @@ async fn test_openai_client_integration() {
 
     let response = client.complete(request).await;
     assert!(response.is_ok());
-    
+
     let response = response.unwrap();
     assert!(!response.content.is_empty());
     println!("OpenAI Response: {}", response.content);

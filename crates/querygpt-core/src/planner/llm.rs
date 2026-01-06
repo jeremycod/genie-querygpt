@@ -78,13 +78,13 @@ pub enum CompilationStatus {
 pub enum LlmError {
     #[error("failed to parse LLM output as JSON: {0}")]
     JsonParseError(String),
-    
+
     #[error("LLM output missing required field: {0}")]
     MissingField(String),
-    
+
     #[error("LLM client error: {0}")]
     ClientError(String),
-    
+
     #[error("invalid LLM response format: {0}")]
     InvalidFormat(String),
 }

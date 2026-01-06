@@ -90,15 +90,13 @@ impl SchemaSummary {
             tables: vec![TableSummary {
                 name: format!("{}_latest", workspace),
                 alias: workspace.to_string(),
-                fields: vec![
-                    FieldSummary {
-                        name: "id".to_string(),
-                        field_type: "uuid".to_string(),
-                        nullable: false,
-                        description: Some("Primary key".to_string()),
-                        enum_values: None,
-                    },
-                ],
+                fields: vec![FieldSummary {
+                    name: "id".to_string(),
+                    field_type: "uuid".to_string(),
+                    nullable: false,
+                    description: Some("Primary key".to_string()),
+                    enum_values: None,
+                }],
                 description: Some(format!("Latest {} data", workspace)),
             }],
             relationships: vec![],

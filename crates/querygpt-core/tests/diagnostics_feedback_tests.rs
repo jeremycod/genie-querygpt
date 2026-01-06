@@ -1,18 +1,18 @@
+use querygpt_core::compile::diagnostics::CompilerDiagnostics;
 use querygpt_core::planner::{
+    confirmation::AutoApproveConfirmation,
     llm_planner::LlmPlanner,
     mock_client::MockClient,
+    orchestration::{OrchestrationResult, Orchestrator},
     planner::{Planner, PlannerContext},
-    orchestration::{Orchestrator, OrchestrationResult},
-    confirmation::AutoApproveConfirmation,
 };
-use querygpt_core::compile::diagnostics::CompilerDiagnostics;
 use querygpt_core::schema::registry::SchemaRegistry;
 
 #[tokio::test]
 async fn llm_planner_uses_diagnostics_in_revision() {
     // Create a mock client that returns different responses for initial vs revision
     let mut mock_client = MockClient::new();
-    
+
     // First response (will fail compilation)
     mock_client.add_response(
         "Generate a ReportSpec for this request: test invalid field".to_string(),
@@ -29,36 +29,36 @@ async fn llm_planner_uses_diagnostics_in_revision() {
             "assumptions": ["Using invalid field"],
             "open_questions": [],
             "notes": "Initial attempt"
-        }"#.to_string(),
+        }"#
+        .to_string(),
     );
-    
+
     let planner = LlmPlanner::new(Box::new(mock_client), "test-model".to_string());
-    
+
     let ctx = PlannerContext::simple(
         "test".to_string(),
         vec!["valid_field".to_string()],
         vec!["test_table".to_string()],
     );
-    
+
     // Test initial suggestion
-    let initial_draft = planner.suggest_report_spec("test invalid field", ctx.clone()).await.unwrap();
+    let initial_draft = planner
+        .suggest_report_spec("test invalid field", ctx.clone())
+        .await
+        .unwrap();
     assert_eq!(initial_draft.spec.select[0].field, "invalid_field");
-    
+
     // Test revision with diagnostics
-    let diagnostics = CompilerDiagnostics::unknown_field(
-        "invalid_field".to_string(),
-        "select field validation"
-    );
-    
+    let diagnostics =
+        CompilerDiagnostics::unknown_field("invalid_field".to_string(), "select field validation");
+
     // The revision should use diagnostics in the prompt
     // For this test, we'll verify the method can be called without error
     // In a real scenario, the mock would return a corrected spec
-    let revision_result = planner.revise_report_spec(
-        "test invalid field",
-        ctx,
-        &diagnostics,
-    ).await;
-    
+    let revision_result = planner
+        .revise_report_spec("test invalid field", ctx, &diagnostics)
+        .await;
+
     // Should succeed (mock client will return the same response)
     assert!(revision_result.is_ok());
 }
@@ -67,8 +67,8 @@ async fn llm_planner_uses_diagnostics_in_revision() {
 #[ignore] // Requires schema files
 async fn orchestration_retry_loop_with_llm_planner() {
     // Create a planner that succeeds on revision
-    let mock_client = MockClient::new()
-        .with_default_response(r#"{
+    let mock_client = MockClient::new().with_default_response(
+        r#"{
             "report_spec": {
                 "version": 1,
                 "workspace": "campaigns_offers",
@@ -81,27 +81,27 @@ async fn orchestration_retry_loop_with_llm_planner() {
             "assumptions": ["Using valid campaign_id field"],
             "open_questions": [],
             "notes": "Corrected field name"
-        }"#.to_string());
-    
+        }"#
+        .to_string(),
+    );
+
     let planner = LlmPlanner::new(Box::new(mock_client), "test-model".to_string());
     let orchestrator = Orchestrator::new(planner, AutoApproveConfirmation);
-    
+
     // Load test registry
     let registry = SchemaRegistry::load("../../config/workspaces/campaigns_offers.index.json")
         .expect("load test schema registry");
-    
+
     let ctx = PlannerContext::simple(
         "campaigns_offers".to_string(),
         vec!["campaign_id".to_string()],
         vec!["campaigns_latest".to_string()],
     );
-    
-    let result = orchestrator.suggest_and_compile(
-        &registry,
-        "show me campaigns",
-        ctx,
-    ).await;
-    
+
+    let result = orchestrator
+        .suggest_and_compile(&registry, "show me campaigns", ctx)
+        .await;
+
     // Should succeed with the valid spec
     match result {
         OrchestrationResult::Success { plan, draft, .. } => {
@@ -114,8 +114,8 @@ async fn orchestration_retry_loop_with_llm_planner() {
 
 #[tokio::test]
 async fn diagnostics_feedback_includes_error_details() {
-    let mock_client = MockClient::new()
-        .with_default_response(r#"{
+    let mock_client = MockClient::new().with_default_response(
+        r#"{
             "report_spec": {
                 "version": 1,
                 "workspace": "test",
@@ -128,29 +128,31 @@ async fn diagnostics_feedback_includes_error_details() {
             "assumptions": ["Fixed based on diagnostics"],
             "open_questions": [],
             "notes": "Applied error feedback"
-        }"#.to_string());
-    
+        }"#
+        .to_string(),
+    );
+
     let planner = LlmPlanner::new(Box::new(mock_client), "test-model".to_string());
-    
+
     let ctx = PlannerContext::simple(
         "test".to_string(),
         vec!["test_field".to_string()],
         vec!["test_table".to_string()],
     );
-    
+
     // Create diagnostics with specific error details
     let diagnostics = CompilerDiagnostics::schema_mismatch(
         "expected valid field".to_string(),
         "found invalid_field".to_string(),
     );
-    
-    let result = planner.revise_report_spec(
-        "test prompt",
-        ctx,
-        &diagnostics,
-    ).await;
-    
+
+    let result = planner
+        .revise_report_spec("test prompt", ctx, &diagnostics)
+        .await;
+
     assert!(result.is_ok());
     let draft = result.unwrap();
-    assert!(draft.assumptions.contains(&"Fixed based on diagnostics".to_string()));
+    assert!(draft
+        .assumptions
+        .contains(&"Fixed based on diagnostics".to_string()));
 }

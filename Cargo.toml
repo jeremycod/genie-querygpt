@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/querygpt-core",
+  "crates/querygpt-compiler",
   "crates/querygpt-server",
   "crates/querygpt-worker",
   "crates/querygpt-cli",

@@ -50,7 +50,7 @@ impl Default for MockClient {
 impl LlmClient for MockClient {
     async fn complete(&self, req: LlmRequest) -> anyhow::Result<LlmResponse> {
         let prompt_key = self.extract_prompt_key(&req);
-        
+
         let content = self
             .responses
             .get(&prompt_key)

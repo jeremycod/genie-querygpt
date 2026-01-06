@@ -22,3 +22,5 @@ curl -X POST http://localhost:8080/generate   -H 'content-type: application/json
 - Workspace index: `config/workspaces/*.index.json`
 - Schema Cards: `config/workspaces/*.schema_cards.json`
 - Exemplars: `config/workspaces/<ws>/exemplars/*.sql`
+
+

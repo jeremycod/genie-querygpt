@@ -1,10 +1,6 @@
-
-use std::collections::BTreeSet;
+use crate::dsl::plan::{IntermediatePlan, JoinType, PlanJoin, SortDirection};
 use anyhow::{anyhow, Result};
-use crate::dsl::plan::{IntermediatePlan, PlanJoin, JoinType, SortDirection};
-
-
-
+use std::collections::BTreeSet;
 
 fn render_order_by(plan: &IntermediatePlan) -> String {
     if plan.order_by.is_empty() {
@@ -27,7 +23,6 @@ fn render_order_by(plan: &IntermediatePlan) -> String {
     format!("\nORDER BY {}", items)
 }
 
-
 fn is_aggregate_expr(expr: &str) -> bool {
     // Minimal heuristics good enough for v1:
     // You can extend later (COUNT, SUM, MIN, MAX, AVG, ARRAY_AGG, BOOL_AND, etc.)
@@ -41,7 +36,10 @@ fn is_aggregate_expr(expr: &str) -> bool {
         || upper.contains("ARRAY_AGG(")
 }
 fn group_by_exprs(plan: &IntermediatePlan) -> Vec<String> {
-    let has_agg = plan.projections.iter().any(|p| is_aggregate_expr(&p.expression));
+    let has_agg = plan
+        .projections
+        .iter()
+        .any(|p| is_aggregate_expr(&p.expression));
 
     if !has_agg {
         return vec![];
@@ -62,36 +60,34 @@ fn render_group_by(plan: &IntermediatePlan) -> String {
     }
 }
 
-
-
 fn choose_root_alias(plan: &IntermediatePlan) -> Result<String> {
-    let table_aliases: BTreeSet<String> =
-        plan.tables.iter().map(|t| t.alias.clone()).collect();
+    let table_aliases: BTreeSet<String> = plan.tables.iter().map(|t| t.alias.clone()).collect();
 
     let right_aliases: BTreeSet<String> =
         plan.joins.iter().map(|j| j.right_alias.clone()).collect();
 
-    let left_aliases: BTreeSet<String> =
-        plan.joins.iter().map(|j| j.left_alias.clone()).collect();
-    
+    let left_aliases: BTreeSet<String> = plan.joins.iter().map(|j| j.left_alias.clone()).collect();
+
     // First try: tables that are never joined TO (traditional root selection)
-    let traditional_roots: BTreeSet<String> = table_aliases.difference(&right_aliases).cloned().collect();
-    
+    let traditional_roots: BTreeSet<String> =
+        table_aliases.difference(&right_aliases).cloned().collect();
+
     // If we have joins, prefer a root that appears as a left_alias (can start a join chain)
     if !plan.joins.is_empty() {
-        let viable_roots: BTreeSet<String> = traditional_roots.intersection(&left_aliases).cloned().collect();
-        
+        let viable_roots: BTreeSet<String> = traditional_roots
+            .intersection(&left_aliases)
+            .cloned()
+            .collect();
+
         if let Some(root) = viable_roots.iter().next() {
             return Ok(root.clone());
         }
     }
-    
+
     // Fallback to any traditional root
-    traditional_roots
-        .iter()
-        .next()
-        .cloned()
-        .ok_or_else(|| anyhow!("cannot determine root alias: plan has no tables or join graph is cyclic"))
+    traditional_roots.iter().next().cloned().ok_or_else(|| {
+        anyhow!("cannot determine root alias: plan has no tables or join graph is cyclic")
+    })
 }
 
 fn sorted_joins(mut joins: Vec<PlanJoin>) -> Vec<PlanJoin> {
@@ -117,14 +113,14 @@ fn order_joins(plan: &IntermediatePlan, root: &str) -> Result<Vec<PlanJoin>> {
             if not_ready.is_empty() {
                 return Ok(acc);
             }
-            
+
             // Check if we have disconnected components - find unvisited left aliases
             let unvisited_left_aliases: BTreeSet<String> = not_ready
                 .iter()
                 .map(|j| j.left_alias.clone())
                 .filter(|alias| !visited.contains(alias))
                 .collect();
-                
+
             if !unvisited_left_aliases.is_empty() {
                 // Add the first unvisited left alias to visited to continue processing
                 let new_root = unvisited_left_aliases.iter().next().unwrap().clone();
@@ -132,7 +128,7 @@ fn order_joins(plan: &IntermediatePlan, root: &str) -> Result<Vec<PlanJoin>> {
                 new_visited.insert(new_root);
                 return step(new_visited, not_ready, acc);
             }
-            
+
             return Err(anyhow!(
                 "cannot order joins: disconnected or wrong directions. remaining: {:?}",
                 not_ready
@@ -144,28 +140,24 @@ fn order_joins(plan: &IntermediatePlan, root: &str) -> Result<Vec<PlanJoin>> {
             .chain(ready.iter().map(|j| j.right_alias.clone()))
             .collect();
 
-        let acc2: Vec<PlanJoin> = acc
-            .into_iter()
-            .chain(ready.into_iter())
-            .collect();
+        let acc2: Vec<PlanJoin> = acc.into_iter().chain(ready.into_iter()).collect();
 
         step(visited2, not_ready, acc2)
     }
 
     let remaining = sorted_joins(plan.joins.clone());
-    
+
     let visited: BTreeSet<String> = [root.to_string()].into_iter().collect();
 
     step(visited, remaining, Vec::new())
 }
 
-
-
 fn render_sql_inner(plan: &IntermediatePlan) -> Result<String> {
     let select_clause = if plan.projections.is_empty() {
         "SELECT 1".to_string()
     } else {
-        let cols = plan.projections
+        let cols = plan
+            .projections
             .iter()
             .map(|p| {
                 if let Some(alias) = &p.alias {
@@ -181,7 +173,10 @@ fn render_sql_inner(plan: &IntermediatePlan) -> Result<String> {
 
     // FROM (deterministic + valid)
     let root_alias = choose_root_alias(plan)?;
-    let root_table = plan.tables.iter().find(|t| t.alias == root_alias)
+    let root_table = plan
+        .tables
+        .iter()
+        .find(|t| t.alias == root_alias)
         .ok_or_else(|| anyhow!("root alias '{}' not found in plan.tables", root_alias))?;
     let from_clause = format!("FROM {} {}", root_table.name, root_table.alias);
 
@@ -194,7 +189,8 @@ fn render_sql_inner(plan: &IntermediatePlan) -> Result<String> {
                 JoinType::Left => "LEFT JOIN",
             };
 
-            let on_clause = j.conditions
+            let on_clause = j
+                .conditions
                 .iter()
                 .map(|c| format!("{} = {}", c.left_field, c.right_field))
                 .collect::<Vec<_>>()
@@ -204,29 +200,28 @@ fn render_sql_inner(plan: &IntermediatePlan) -> Result<String> {
                 .tables
                 .iter()
                 .find(|t| t.alias == j.right_alias)
-                .ok_or_else(|| anyhow!(
-                "join right_alias '{}' not found in plan.tables",
-                j.right_alias
-            ))?
+                .ok_or_else(|| {
+                    anyhow!(
+                        "join right_alias '{}' not found in plan.tables",
+                        j.right_alias
+                    )
+                })?
                 .name
                 .clone();
 
             Ok(format!(
                 "{} {} {} ON {}",
-                join_type,
-                right_table_name,
-                j.right_alias,
-                on_clause
+                join_type, right_table_name, j.right_alias, on_clause
             ))
         })
         .collect::<Result<Vec<_>>>()?
         .join("\n");
 
-
     let where_clause = if plan.filters.is_empty() {
         "".to_string()
     } else {
-        let predicates = plan.filters
+        let predicates = plan
+            .filters
             .iter()
             .map(|f| f.expression.clone())
             .collect::<Vec<_>>()
@@ -246,8 +241,6 @@ fn render_sql_inner(plan: &IntermediatePlan) -> Result<String> {
     );
     Ok(final_sql)
 }
-
-
 
 /// Stub: Render an intermediate plan into SQL, optionally with an LLM filling in details.
 pub fn render_sql(plan: &IntermediatePlan) -> Result<String> {
