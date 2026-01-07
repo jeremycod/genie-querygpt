@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use querygpt_core::planner::fixture_planner::FixturePlanner;
 use querygpt_core::planner::llm::{LlmClient, LlmMessage, LlmRequest, LlmRole};
 use querygpt_core::planner::openai_client::OpenAIClient;
 
@@ -54,6 +55,144 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
+/// Build a FixturePlanner with common test cases
+fn build_fixture_planner() -> FixturePlanner {
+    use querygpt_core::dsl::report_spec::{
+        Filter, FilterOp, Mode, OrderBy, ReportSpec, SelectItem, SortDir,
+    };
+    use serde_json::json;
+
+    let mut planner = FixturePlanner::new();
+
+    // Fixture 1: Simple - show all campaigns
+    planner.add_fixture(
+        "show all campaigns".to_string(),
+        ReportSpec {
+            version: 1,
+            workspace: "campaigns_offers".to_string(),
+            select: vec![
+                SelectItem {
+                    field: "campaign_id".to_string(),
+                    alias: None,
+                },
+                SelectItem {
+                    field: "campaign_name".to_string(),
+                    alias: None,
+                },
+            ],
+            filters: vec![],
+            order_by: vec![],
+            mode: Mode::Preview,
+            pagination: None,
+        },
+    );
+
+    // Fixture 2: Show all offers (just id and name for now)
+    planner.add_fixture(
+        "show all offers".to_string(),
+        ReportSpec {
+            version: 1,
+            workspace: "campaigns_offers".to_string(),
+            select: vec![
+                SelectItem {
+                    field: "offer_id".to_string(),
+                    alias: None,
+                },
+                SelectItem {
+                    field: "offer_name".to_string(),
+                    alias: None,
+                },
+            ],
+            filters: vec![],
+            order_by: vec![],
+            mode: Mode::Preview,
+            pagination: None,
+        },
+    );
+
+    // Fixture 3: Active campaigns only (with filter)
+    planner.add_fixture(
+        "show active campaigns".to_string(),
+        ReportSpec {
+            version: 1,
+            workspace: "campaigns_offers".to_string(),
+            select: vec![
+                SelectItem {
+                    field: "campaign_id".to_string(),
+                    alias: None,
+                },
+                SelectItem {
+                    field: "campaign_name".to_string(),
+                    alias: None,
+                },
+            ],
+            filters: vec![Filter {
+                field: "campaign_deleted".to_string(),
+                op: FilterOp::Eq,
+                value: json!(false),
+            }],
+            order_by: vec![],
+            mode: Mode::Preview,
+            pagination: None,
+        },
+    );
+
+    // Fixture 4: Campaigns ordered by name
+    planner.add_fixture(
+        "show campaigns ordered by name".to_string(),
+        ReportSpec {
+            version: 1,
+            workspace: "campaigns_offers".to_string(),
+            select: vec![
+                SelectItem {
+                    field: "campaign_id".to_string(),
+                    alias: None,
+                },
+                SelectItem {
+                    field: "campaign_name".to_string(),
+                    alias: None,
+                },
+            ],
+            filters: vec![],
+            order_by: vec![OrderBy {
+                field: "campaign_name".to_string(),
+                dir: SortDir::Asc,
+            }],
+            mode: Mode::Preview,
+            pagination: None,
+        },
+    );
+
+    // Fixture 5: Active offers (deleted = false)
+    planner.add_fixture(
+        "show active offers".to_string(),
+        ReportSpec {
+            version: 1,
+            workspace: "campaigns_offers".to_string(),
+            select: vec![
+                SelectItem {
+                    field: "offer_id".to_string(),
+                    alias: None,
+                },
+                SelectItem {
+                    field: "offer_name".to_string(),
+                    alias: None,
+                },
+            ],
+            filters: vec![Filter {
+                field: "offer_deleted".to_string(),
+                op: FilterOp::Eq,
+                value: json!(false),
+            }],
+            order_by: vec![],
+            mode: Mode::Preview,
+            pagination: None,
+        },
+    );
+
+    planner
+}
+
 async fn handle_plan_command(
     prompt: String,
     yes: bool,
@@ -61,9 +200,7 @@ async fn handle_plan_command(
     _explain: bool,
     openai: bool,
 ) -> anyhow::Result<()> {
-    use querygpt_core::dsl::report_spec::{Mode, ReportSpec, SelectItem};
     use querygpt_core::planner::confirmation::AutoApproveConfirmation;
-    use querygpt_core::planner::fixture_planner::FixturePlanner;
     use querygpt_core::planner::orchestration::Orchestrator;
     use querygpt_core::planner::planner::PlannerContext;
     use querygpt_core::schema::registry::SchemaRegistry;
@@ -86,31 +223,8 @@ async fn handle_plan_command(
     let registry = SchemaRegistry::load(index_path.to_str().unwrap())
         .map_err(|e| anyhow::anyhow!("Failed to load schema registry: {}", e))?;
 
-    // Step 2: Create a fixture planner with a simple test case
-    let mut planner = FixturePlanner::new();
-
-    // Add a simple fixture for testing
-    planner.add_fixture(
-        "show all campaigns".to_string(),
-        ReportSpec {
-            version: 1,
-            workspace: "campaigns_offers".to_string(),
-            select: vec![
-                SelectItem {
-                    field: "campaign_id".to_string(),
-                    alias: None,
-                },
-                SelectItem {
-                    field: "campaign_name".to_string(),
-                    alias: None,
-                },
-            ],
-            filters: vec![],
-            order_by: vec![],
-            mode: Mode::Preview,
-            pagination: None,
-        },
-    );
+    // Step 2: Create fixture planner with multiple test cases
+    let planner = build_fixture_planner();
 
     // Step 3: Create orchestrator (using auto-approve for now)
     // TODO: Add InteractiveConfirmation support in next step
@@ -152,8 +266,12 @@ async fn handle_plan_command(
         }
         querygpt_core::planner::orchestration::OrchestrationResult::PlannerFailed { error } => {
             println!("\n❌ Planner failed: {}", error);
-            println!("\n💡 Hint: The fixture planner only knows about 'show all campaigns'");
-            println!("   Try: querygpt plan --prompt \"show all campaigns\"");
+            println!("\n💡 Available test prompts:");
+            println!("   • show all campaigns");
+            println!("   • show all offers");
+            println!("   • show active campaigns");
+            println!("   • show active offers");
+            println!("   • show campaigns ordered by name");
             Err(anyhow::anyhow!("Planner failed: {}", error))
         }
         querygpt_core::planner::orchestration::OrchestrationResult::UserRejected { .. } => {
