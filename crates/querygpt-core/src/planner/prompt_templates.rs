@@ -32,9 +32,9 @@ REQUIRED OUTPUT FORMAT:
   "report_spec": {{
     "version": 1,
     "workspace": "{}",
-    "select": [{{"field": "field_name", "alias": null}}],
-    "filters": [],
-    "order_by": [],
+    "select": [{{"field": "actual_field_from_schema", "alias": null}}],
+    "filters": [{{"field": "field_name", "op": "eq", "value": "example_value"}}],
+    "order_by": [{{"field": "field_name", "dir": "asc"}}],
     "mode": "preview",
     "pagination": null
   }},
@@ -43,7 +43,20 @@ REQUIRED OUTPUT FORMAT:
   "notes": "optional explanation"
 }}
 
-IMPORTANT: Only output valid JSON. No explanations outside the JSON structure."#,
+CRITICAL RULES:
+1. "select" array MUST contain at least one field from the SCHEMA SUMMARY above
+2. All field names MUST exist in the schema (see SCHEMA SUMMARY section)
+3. Use lowercase for "op" values: "eq", "in", "overlaps", "gte", "lte"
+4. Use lowercase for "dir" values: "asc", "desc"
+5. "filters" and "order_by" can be empty arrays [] if not needed
+6. Only output valid JSON - no explanations outside the JSON structure
+
+FILTER OPERATORS (lowercase):
+- "eq": Equal to
+- "in": In list (value must be array)
+- "overlaps": Overlaps with (for array fields)
+- "gte": Greater than or equal
+- "lte": Less than or equal"#,
             constraints_info, ctx.workspace, schema_info, examples_info, ctx.workspace
         )
     }
@@ -76,9 +89,9 @@ REQUIRED OUTPUT FORMAT:
   "report_spec": {{
     "version": 1,
     "workspace": "{}",
-    "select": [{{"field": "field_name", "alias": null}}],
-    "filters": [],
-    "order_by": [],
+    "select": [{{"field": "actual_field_from_schema", "alias": null}}],
+    "filters": [{{"field": "field_name", "op": "eq", "value": "example_value"}}],
+    "order_by": [{{"field": "field_name", "dir": "asc"}}],
     "mode": "preview",
     "pagination": null
   }},
@@ -86,6 +99,20 @@ REQUIRED OUTPUT FORMAT:
   "open_questions": ["list any unclear requirements"],
   "notes": "explanation of fixes made"
 }}
+
+CRITICAL RULES:
+1. "select" array MUST contain at least one field from the SCHEMA SUMMARY above
+2. All field names MUST exist in the schema (see SCHEMA SUMMARY section)
+3. Use lowercase for "op" values: "eq", "in", "overlaps", "gte", "lte"
+4. Use lowercase for "dir" values: "asc", "desc"
+5. "filters" and "order_by" can be empty arrays [] if not needed
+
+FILTER OPERATORS (lowercase):
+- "eq": Equal to
+- "in": In list (value must be array)
+- "overlaps": Overlaps with (for array fields)
+- "gte": Greater than or equal
+- "lte": Less than or equal
 
 IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
             original_prompt,
