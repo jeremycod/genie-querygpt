@@ -56,19 +56,122 @@ async fn main() -> anyhow::Result<()> {
 
 async fn handle_plan_command(
     prompt: String,
-    _yes: bool,
-    _max_attempts: usize,
+    yes: bool,
+    max_attempts: usize,
     _explain: bool,
     openai: bool,
 ) -> anyhow::Result<()> {
+    use querygpt_core::dsl::report_spec::{Mode, ReportSpec, SelectItem};
+    use querygpt_core::planner::confirmation::AutoApproveConfirmation;
+    use querygpt_core::planner::fixture_planner::FixturePlanner;
+    use querygpt_core::planner::orchestration::Orchestrator;
+    use querygpt_core::planner::planner::PlannerContext;
+    use querygpt_core::schema::registry::SchemaRegistry;
+    use querygpt_core::sql::render::render_sql;
+
     if openai {
-        return handle_openai_demo(prompt).await;
+        println!("❌ OpenAI integration not yet wired to orchestration");
+        println!("💡 Working on it - use default mode for now");
+        return Err(anyhow::anyhow!("OpenAI integration coming in next step"));
     }
 
-    println!("❌ Non-OpenAI mode not implemented in this demo");
-    println!("💡 Use --openai flag to test OpenAI integration");
-    Err(anyhow::anyhow!("Use --openai flag for demo"))
+    // Step 1: Load schema registry
+    let crate_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = crate_root
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("resolve repo root");
+    let index_path = repo_root.join("config/workspaces/campaigns_offers.index.json");
+
+    let registry = SchemaRegistry::load(index_path.to_str().unwrap())
+        .map_err(|e| anyhow::anyhow!("Failed to load schema registry: {}", e))?;
+
+    // Step 2: Create a fixture planner with a simple test case
+    let mut planner = FixturePlanner::new();
+
+    // Add a simple fixture for testing
+    planner.add_fixture(
+        "show all campaigns".to_string(),
+        ReportSpec {
+            version: 1,
+            workspace: "campaigns_offers".to_string(),
+            select: vec![
+                SelectItem {
+                    field: "campaign_id".to_string(),
+                    alias: None,
+                },
+                SelectItem {
+                    field: "campaign_name".to_string(),
+                    alias: None,
+                },
+            ],
+            filters: vec![],
+            order_by: vec![],
+            mode: Mode::Preview,
+            pagination: None,
+        },
+    );
+
+    // Step 3: Create orchestrator (using auto-approve for now)
+    // TODO: Add InteractiveConfirmation support in next step
+    if !yes {
+        println!("⚠️  Interactive confirmation not yet implemented - using auto-approve");
+    }
+    let orchestrator =
+        Orchestrator::new(planner, AutoApproveConfirmation).with_max_retries(max_attempts);
+
+    // Step 4: Build planner context
+    let context = PlannerContext::simple(
+        "campaigns_offers".to_string(),
+        vec!["campaign_id".to_string(), "campaign_name".to_string()],
+        vec!["campaigns_latest".to_string()],
+    );
+
+    // Step 5: Run orchestration
+    let result = orchestrator
+        .suggest_and_compile(&registry, &prompt, context)
+        .await;
+
+    // Step 6: Handle result and display output
+    match result {
+        querygpt_core::planner::orchestration::OrchestrationResult::Success { plan, .. } => {
+            // Render SQL
+            let sql = render_sql(&plan)?;
+
+            println!("\n✅ Success! Generated SQL:");
+            println!("{}", sql);
+            Ok(())
+        }
+        querygpt_core::planner::orchestration::OrchestrationResult::CompilationFailed {
+            diagnostics,
+            ..
+        } => {
+            println!("\n❌ Compilation failed:");
+            println!("{:#?}", diagnostics);
+            Err(anyhow::anyhow!("Compilation failed"))
+        }
+        querygpt_core::planner::orchestration::OrchestrationResult::PlannerFailed { error } => {
+            println!("\n❌ Planner failed: {}", error);
+            println!("\n💡 Hint: The fixture planner only knows about 'show all campaigns'");
+            println!("   Try: querygpt plan --prompt \"show all campaigns\"");
+            Err(anyhow::anyhow!("Planner failed: {}", error))
+        }
+        querygpt_core::planner::orchestration::OrchestrationResult::UserRejected { .. } => {
+            println!("\n❌ User rejected the changes");
+            Err(anyhow::anyhow!("User rejected"))
+        }
+        querygpt_core::planner::orchestration::OrchestrationResult::RetryLimitExceeded {
+            diagnostics,
+            attempts,
+            ..
+        } => {
+            println!("\n❌ Retry limit exceeded after {} attempts", attempts);
+            println!("{:#?}", diagnostics);
+            Err(anyhow::anyhow!("Retry limit exceeded"))
+        }
+    }
 }
+#[allow(dead_code)] // Will be used in Step 4
 async fn handle_openai_demo(prompt: String) -> anyhow::Result<()> {
     println!("🤖 Using OpenAI client for: {}", prompt);
 
