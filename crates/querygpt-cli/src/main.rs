@@ -200,7 +200,7 @@ async fn handle_plan_command(
     _explain: bool,
     openai: bool,
 ) -> anyhow::Result<()> {
-    use querygpt_core::planner::confirmation::AutoApproveConfirmation;
+    use querygpt_core::planner::confirmation::{AutoApproveConfirmation, InteractiveConfirmation};
     use querygpt_core::planner::orchestration::Orchestrator;
     use querygpt_core::planner::planner::PlannerContext;
     use querygpt_core::schema::registry::SchemaRegistry;
@@ -226,27 +226,31 @@ async fn handle_plan_command(
     // Step 2: Create fixture planner with multiple test cases
     let planner = build_fixture_planner();
 
-    // Step 3: Create orchestrator (using auto-approve for now)
-    // TODO: Add InteractiveConfirmation support in next step
-    if !yes {
-        println!("⚠️  Interactive confirmation not yet implemented - using auto-approve");
-    }
-    let orchestrator =
-        Orchestrator::new(planner, AutoApproveConfirmation).with_max_retries(max_attempts);
-
-    // Step 4: Build planner context
+    // Step 3: Build planner context
     let context = PlannerContext::simple(
         "campaigns_offers".to_string(),
         vec!["campaign_id".to_string(), "campaign_name".to_string()],
         vec!["campaigns_latest".to_string()],
     );
 
-    // Step 5: Run orchestration
-    let result = orchestrator
-        .suggest_and_compile(&registry, &prompt, context)
-        .await;
+    // Step 4: Run orchestration with appropriate confirmation strategy
+    let result = if yes {
+        // Auto-approve mode
+        let orchestrator =
+            Orchestrator::new(planner, AutoApproveConfirmation).with_max_retries(max_attempts);
+        orchestrator
+            .suggest_and_compile(&registry, &prompt, context)
+            .await
+    } else {
+        // Interactive mode - prompts user for confirmation
+        let orchestrator =
+            Orchestrator::new(planner, InteractiveConfirmation).with_max_retries(max_attempts);
+        orchestrator
+            .suggest_and_compile(&registry, &prompt, context)
+            .await
+    };
 
-    // Step 6: Handle result and display output
+    // Step 5: Handle result and display output
     match result {
         querygpt_core::planner::orchestration::OrchestrationResult::Success { plan, .. } => {
             // Render SQL
