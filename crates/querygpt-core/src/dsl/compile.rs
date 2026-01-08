@@ -120,6 +120,7 @@ fn field_to_sql_expr(
 
     // Priority 2: Check json_paths in schema (source of truth for JSONB attributes)
     // Try both exact match and camelCase conversion (e.g., package_id → packageId)
+    // ALL JSONB fields are stored as arrays, even single-value fields like brand, startDate
     let field_camel = to_camel_case(field);
     for entity in &cards.entities {
         if let Some(alias) = alias_map.get(&entity.name) {
@@ -127,9 +128,10 @@ fn field_to_sql_expr(
                 // Extract field name from $.fieldName
                 let path_field = json_path.path.trim_start_matches("$.");
                 if path_field == field || path_field == field_camel {
-                    // Generate JSONB extraction SQL
+                    // All JSONB attributes are stored as arrays - return base path (-> 'field')
+                    // Callers will add ->> 0 for single-value arrays or use ?| for multi-value
                     return Some(format!(
-                        "{}.{} ->> '{}'",
+                        "{}.{} -> '{}'",
                         alias, json_path.column, path_field
                     ));
                 }
@@ -205,10 +207,18 @@ pub fn translate_ordering(
 ///   - field: the original report field name
 ///   - expression: the SQL expression with table aliases
 ///   - alias: an optional alias provided in the ReportSpec
+/// Helper to check if a field is used with overlaps operator (multi-value array)
+fn is_multivalue_array_field(field: &str, spec: &ReportSpec) -> bool {
+    spec.filters
+        .iter()
+        .any(|f| f.field == field && matches!(f.op, FilterOp::Overlaps))
+}
+
 pub fn translate_projections(
     select: &[SelectItem],
     alias_map: &HashMap<String, String>,
     cards: &SchemaCards,
+    spec: &ReportSpec,
 ) -> CompilerResult<Vec<PlanProjection>> {
     select
         .iter()
@@ -233,6 +243,18 @@ pub fn translate_projections(
                     })?
                 };
 
+            // For JSONB single-value array fields, add ->> 0 to extract first element
+            // Multi-value arrays (used with overlaps) keep the full array
+            let expr = if is_jsonb_array_field(&item.field, cards)
+                && !is_multivalue_array_field(&item.field, spec)
+                && expr.contains("->")
+                && !expr.contains("->>")
+            {
+                format!("{} ->> 0", expr)
+            } else {
+                expr
+            };
+
             // Auto-generate alias for JSON extractions to prevent ?column? in PostgreSQL
             let alias = if item.alias.is_none() && (expr.contains("->") || expr.contains("->>")) {
                 Some(item.field.clone())
@@ -247,6 +269,44 @@ pub fn translate_projections(
             })
         })
         .collect()
+}
+
+/// Helper to check if a field is a JSONB field (all JSONB fields are stored as arrays)
+fn is_jsonb_array_field(field: &str, cards: &SchemaCards) -> bool {
+    let field_camel = to_camel_case(field);
+    for entity in &cards.entities {
+        for json_path in &entity.json_paths {
+            let path_field = json_path.path.trim_start_matches("$.");
+            if path_field == field || path_field == field_camel {
+                // All JSONB attributes are stored as arrays, regardless of data_type
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Get the JSONB base path for a field (e.g., "o.attributes -> 'brand'")
+fn get_jsonb_base_path(
+    field: &str,
+    alias_map: &HashMap<String, String>,
+    cards: &SchemaCards,
+) -> Option<String> {
+    let field_camel = to_camel_case(field);
+    for entity in &cards.entities {
+        if let Some(alias) = alias_map.get(&entity.name) {
+            for json_path in &entity.json_paths {
+                let path_field = json_path.path.trim_start_matches("$.");
+                if path_field == field || path_field == field_camel {
+                    return Some(format!(
+                        "{}.{} -> '{}'",
+                        alias, json_path.column, path_field
+                    ));
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Translate a single filter into SQL.
@@ -264,6 +324,9 @@ fn translate_filter(
         }
     })?;
 
+    // Check if this is a JSONB array field
+    let is_array = is_jsonb_array_field(&filter.field, cards);
+
     match filter.op {
         FilterOp::Eq => {
             // Handle null checks with IS NULL
@@ -271,7 +334,29 @@ fn translate_filter(
                 return Ok(format!("{} IS NULL", column_sql));
             }
 
-            // Expect scalar values; wrap strings in single quotes.
+            // For JSONB array fields, use @> containment operator
+            if is_array {
+                let jsonb_base =
+                    get_jsonb_base_path(&filter.field, alias_map, cards).ok_or_else(|| {
+                        CompilerError::InvalidFilter {
+                            field: filter.field.clone(),
+                        }
+                    })?;
+
+                let rhs = match &filter.value {
+                    Value::String(s) => {
+                        format!("'[\"{}\"]'", s.replace('\'', "''").replace('"', "\\\""))
+                    }
+                    _ => {
+                        return Err(CompilerError::InvalidFilter {
+                            field: filter.field.clone(),
+                        })
+                    }
+                };
+                return Ok(format!("{} @> {}", jsonb_base, rhs));
+            }
+
+            // For non-array fields, use standard equality
             let rhs = match &filter.value {
                 Value::String(s) => format!("'{}'", s.replace('\'', "''")),
                 Value::Bool(b) => b.to_string(),
@@ -294,6 +379,29 @@ fn translate_filter(
                     })
                 }
             };
+
+            // For JSONB array fields, use ?| operator (contains any of)
+            if is_array {
+                let jsonb_base =
+                    get_jsonb_base_path(&filter.field, alias_map, cards).ok_or_else(|| {
+                        CompilerError::InvalidFilter {
+                            field: filter.field.clone(),
+                        }
+                    })?;
+
+                let elements_sql = arr
+                    .iter()
+                    .filter_map(|v| match v {
+                        Value::String(s) => Some(format!("'{}'", s.replace('\'', "''"))),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                return Ok(format!("{} ?| ARRAY[{}]", jsonb_base, elements_sql));
+            }
+
+            // For non-array fields, use standard IN
             let vals_sql = arr
                 .iter()
                 .filter_map(|v| {
@@ -329,25 +437,33 @@ fn translate_filter(
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            // Check if this is a JSONB field (indicated by ->> operator in column_sql)
-            if column_sql.contains("->>") {
+            // Check if this is a JSONB field (indicated by -> operator in column_sql)
+            if column_sql.contains("->") {
                 // JSONB field: use ?| operator (JSONB contains any of)
-                // Replace ->> with -> to get JSONB type instead of text
-                let jsonb_column = column_sql.replace("->>", "->");
                 // Wrap in parentheses to avoid operator precedence issues
-                Ok(format!("({} ?| ARRAY[{}])", jsonb_column, elements_sql))
+                Ok(format!("({} ?| ARRAY[{}])", column_sql, elements_sql))
             } else {
                 // Direct array column: use && operator
                 Ok(format!("{} && ARRAY[{}]", column_sql, elements_sql))
             }
         }
-        FilterOp::Gte | FilterOp::Lte => {
-            // Greater-than or less-than comparisons (dates or numbers)
-            let op_str = if matches!(filter.op, FilterOp::Gte) {
-                ">="
-            } else {
-                "<="
+        FilterOp::Gt | FilterOp::Gte | FilterOp::Lt | FilterOp::Lte => {
+            // Comparison operators (dates or numbers)
+            let op_str = match filter.op {
+                FilterOp::Gt => ">",
+                FilterOp::Gte => ">=",
+                FilterOp::Lt => "<",
+                FilterOp::Lte => "<=",
+                _ => unreachable!(),
             };
+
+            // For JSONB array fields, add ->> 0 to extract first element for comparison
+            let lhs = if is_array && column_sql.contains("->") && !column_sql.contains("->>") {
+                format!("{} ->> 0", column_sql)
+            } else {
+                column_sql
+            };
+
             let rhs = match &filter.value {
                 Value::String(s) => format!("'{}'", s.replace('\'', "''")),
                 Value::Number(n) => n.to_string(),
@@ -357,7 +473,7 @@ fn translate_filter(
                     })
                 }
             };
-            Ok(format!("{} {} {}", column_sql, op_str, rhs))
+            Ok(format!("{} {} {}", lhs, op_str, rhs))
         }
     }
 }
@@ -380,8 +496,8 @@ fn resolve_entity<'a>(field: &str, cards: &'a SchemaCards) -> Option<&'a str> {
     match field {
         // partner-level field
         "partnership_id" => return Some("partners"),
-        // campaign-level fields
-        "campaign_id" | "campaign_name" => return Some("campaigns_latest"),
+        // campaign-level fields (brand requires campaigns_latest)
+        "campaign_id" | "campaign_name" | "brand" => return Some("campaigns_latest"),
         // offer-level fields (direct columns)
         "offer_id" | "offer_name" | "workflow_status" | "countries" | "package_id" => {
             return Some("offers_latest")
@@ -565,11 +681,25 @@ fn compile_report_spec_internal(
         .map(|s| resolve_entity(&s.field, schema_cards))
         .collect::<Vec<_>>();
 
-    let required_entities = select_entities
+    let mut required_entities: Vec<_> = select_entities
         .iter()
         .chain(filter_entities.iter())
         .chain(order_by_entities.iter())
-        .collect::<Vec<_>>();
+        .collect();
+
+    // Add bridge tables when needed for joins
+    // If we have both offers_latest and campaigns_latest, add campaign_offers
+    let has_offers = required_entities
+        .iter()
+        .any(|e| e.as_ref() == Some(&"offers_latest"));
+    let has_campaigns = required_entities
+        .iter()
+        .any(|e| e.as_ref() == Some(&"campaigns_latest"));
+
+    if has_offers && has_campaigns {
+        required_entities.push(&Some("campaign_offers"));
+    }
+
     let tables = required_entities
         .iter()
         .filter_map(|e| {
@@ -595,7 +725,7 @@ fn compile_report_spec_internal(
         .map(|t| (t.name.clone(), t.alias.clone()))
         .collect();
     let joins = build_joins(&reg.cards, required_entities, &alias_map)?;
-    let projections = translate_projections(&spec.select, &alias_map, &reg.cards)?;
+    let projections = translate_projections(&spec.select, &alias_map, &reg.cards, spec)?;
     let filters = translate_filters(&spec.filters, &alias_map, &reg.cards)?;
     let order_by = translate_ordering(&spec.order_by, &alias_map, &reg.cards)?;
     let (limit, offset) = compile_pagination(spec)?;

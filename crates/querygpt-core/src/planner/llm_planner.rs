@@ -288,6 +288,8 @@ COMPILER ERRORS: {}
 CONSTRAINTS:
 - Output valid JSON matching the schema
 - Use only fields/tables from schema summary
+- Use LOGICAL field names ONLY (e.g., "brand", "id", "name")
+- NEVER use SQL-qualified names like "o.id" or "c.brand"
 - Fix the errors mentioned above
 - No SQL generation
 

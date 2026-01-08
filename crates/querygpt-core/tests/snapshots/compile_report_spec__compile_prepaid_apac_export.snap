@@ -68,6 +68,10 @@ expression: plan
     {
       "name": "offers_latest",
       "alias": "o"
+    },
+    {
+      "name": "campaign_offers",
+      "alias": "co"
     }
   ],
   "joins": [
@@ -106,6 +110,40 @@ expression: plan
         {
           "left_field": "o.version",
           "right_field": "opr.version"
+        }
+      ]
+    },
+    {
+      "left_alias": "o",
+      "right_alias": "co",
+      "join_type": "Inner",
+      "conditions": [
+        {
+          "left_field": "o.id",
+          "right_field": "co.offer_id"
+        },
+        {
+          "left_field": "o.profile",
+          "right_field": "co.profile"
+        }
+      ]
+    },
+    {
+      "left_alias": "co",
+      "right_alias": "c",
+      "join_type": "Inner",
+      "conditions": [
+        {
+          "left_field": "co.campaign_id",
+          "right_field": "c.id"
+        },
+        {
+          "left_field": "co.profile",
+          "right_field": "c.profile"
+        },
+        {
+          "left_field": "co.version",
+          "right_field": "c.version"
         }
       ]
     },
@@ -163,7 +201,7 @@ expression: plan
     },
     {
       "field": "countries",
-      "expression": "o.attributes ->> 'countries'",
+      "expression": "o.attributes -> 'countries'",
       "alias": "countries"
     },
     {
@@ -173,7 +211,7 @@ expression: plan
     },
     {
       "field": "package_id",
-      "expression": "o.attributes ->> 'packageId'",
+      "expression": "o.attributes -> 'packageId' ->> 0",
       "alias": "package_id"
     }
   ],

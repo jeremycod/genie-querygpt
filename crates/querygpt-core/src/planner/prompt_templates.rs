@@ -32,9 +32,16 @@ REQUIRED OUTPUT FORMAT:
   "report_spec": {{
     "version": 1,
     "workspace": "{}",
-    "select": [{{"field": "actual_field_from_schema", "alias": null}}],
-    "filters": [{{"field": "field_name", "op": "eq", "value": "example_value"}}],
-    "order_by": [{{"field": "field_name", "dir": "asc"}}],
+    "select": [
+      {{"field": "id", "alias": null}},
+      {{"field": "name", "alias": null}},
+      {{"field": "brand", "alias": null}}
+    ],
+    "filters": [
+      {{"field": "brand", "op": "eq", "value": "ESPN"}},
+      {{"field": "start_date", "op": "gte", "value": "2025-01-01"}}
+    ],
+    "order_by": [{{"field": "id", "dir": "asc"}}],
     "mode": "preview",
     "pagination": null
   }},
@@ -43,15 +50,21 @@ REQUIRED OUTPUT FORMAT:
   "notes": "optional explanation"
 }}
 
+FIELD NAME EXAMPLES (use these patterns):
+✅ CORRECT: "id", "name", "brand", "start_date", "end_date", "status", "countries"
+❌ WRONG: "o.id", "c.name", "campaigns_latest.brand", "offers.start_date"
+
 CRITICAL RULES (YOU MUST FOLLOW THESE):
 ⚠️  SCHEMA CORRECTNESS:
 1. "select" array MUST NOT be empty - include at least one field
 2. ALL field names MUST exist in the SCHEMA SUMMARY above (verify each field!)
 3. NEVER use field names not listed in the schema
 4. If a field is used in "order_by", it MUST also appear in "select"
+5. CRITICAL: Use ONLY the logical field names from the schema (e.g., "brand", "id", "name")
+6. NEVER use SQL-qualified names (❌ WRONG: "o.id", "c.brand" ✅ CORRECT: "id", "brand")
 
 ⚠️  FORMAT CORRECTNESS:
-5. Use lowercase for "op" values: "eq", "in", "overlaps", "gte", "lte"
+5. Use lowercase for "op" values: "eq", "in", "overlaps", "gt", "gte", "lt", "lte"
 6. Use lowercase for "dir" values: "asc", "desc"
 7. "filters" and "order_by" can be empty arrays [] if not needed
 8. Only output valid JSON - no explanations outside the JSON structure
@@ -68,8 +81,10 @@ FILTER OPERATORS (lowercase only):
 - "eq": Equal to (for NULL checks use "eq" with value: null, generates IS NULL)
 - "in": In list (value must be array)
 - "overlaps": Overlaps with (for array fields, value must be array)
-- "gte": Greater than or equal
-- "lte": Less than or equal
+- "gt": Greater than (for dates, numbers)
+- "gte": Greater than or equal (for dates, numbers)
+- "lt": Less than (for dates, numbers)
+- "lte": Less than or equal (for dates, numbers)
 
 NULL CHECKS:
 - To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
@@ -82,7 +97,14 @@ When users mention regions, expand them to ISO 3166-1 alpha-2 country codes:
 - LATAM (Latin America): ["AR","BZ","BO","BR","CL","CO","CR","CU","DO","EC","SV","GT","HT","HN","MX","NI","PA","PY","PE","UY","VE"]
 - NA (North America): ["US","CA"]
 
-IMPORTANT: Always use country codes, never use region names as literal values!"#,
+IMPORTANT: Always use country codes, never use region names as literal values!
+
+BRAND FILTERING (ESPN, DISNEY, STAR, HULU):
+When users ask for offers by brand (ESPN, DISNEY, STAR, HULU):
+- Use the "brand" field in filters: {{"field": "brand", "op": "eq", "value": "ESPN"}}
+- Brand values are uppercase: "ESPN", "DISNEY", "STAR", "HULU"
+- The system will automatically handle joins between campaigns and offers
+- Example: "ESPN offers" → {{"field": "brand", "op": "eq", "value": "ESPN"}}"#,
             constraints_info, ctx.workspace, schema_info, examples_info, ctx.workspace
         )
     }
@@ -132,9 +154,11 @@ CRITICAL RULES (YOU MUST FOLLOW THESE):
 2. ALL field names MUST exist in the SCHEMA SUMMARY above (verify each field!)
 3. NEVER use field names not listed in the schema
 4. If a field is used in "order_by", it MUST also appear in "select"
+5. CRITICAL: Use ONLY the logical field names from the schema (e.g., "brand", "id", "name")
+6. NEVER use SQL-qualified names (❌ WRONG: "o.id", "c.brand" ✅ CORRECT: "id", "brand")
 
 ⚠️  FORMAT CORRECTNESS:
-5. Use lowercase for "op" values: "eq", "in", "overlaps", "gte", "lte"
+5. Use lowercase for "op" values: "eq", "in", "overlaps", "gt", "gte", "lt", "lte"
 6. Use lowercase for "dir" values: "asc", "desc"
 7. "filters" and "order_by" can be empty arrays [] if not needed
 8. Only output valid JSON - no explanations outside the JSON structure
@@ -151,8 +175,10 @@ FILTER OPERATORS (lowercase only):
 - "eq": Equal to (for NULL checks use "eq" with value: null, generates IS NULL)
 - "in": In list (value must be array)
 - "overlaps": Overlaps with (for array fields, value must be array)
-- "gte": Greater than or equal
-- "lte": Less than or equal
+- "gt": Greater than (for dates, numbers)
+- "gte": Greater than or equal (for dates, numbers)
+- "lt": Less than (for dates, numbers)
+- "lte": Less than or equal (for dates, numbers)
 
 NULL CHECKS:
 - To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
