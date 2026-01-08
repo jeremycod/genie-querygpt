@@ -87,4 +87,22 @@ pub enum LlmError {
 
     #[error("invalid LLM response format: {0}")]
     InvalidFormat(String),
+
+    #[error("API request timeout after {timeout_secs}s - check network connectivity")]
+    Timeout { timeout_secs: u64 },
+
+    #[error("API rate limit exceeded - {message}")]
+    RateLimit {
+        message: String,
+        retry_after: Option<u64>,
+    },
+
+    #[error("API authentication failed - check your API key")]
+    AuthenticationFailed { message: String },
+
+    #[error("Network error: {0}")]
+    NetworkError(String),
+
+    #[error("API error ({status}): {message}")]
+    ApiError { status: u16, message: String },
 }

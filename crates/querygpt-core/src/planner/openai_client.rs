@@ -1,6 +1,7 @@
-use super::llm::{LlmClient, LlmRequest, LlmResponse, LlmRole, LlmUsage};
+use super::llm::{LlmClient, LlmError, LlmRequest, LlmResponse, LlmRole, LlmUsage};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 /// OpenAI API client for real LLM integration
 pub struct OpenAIClient {
@@ -47,12 +48,36 @@ struct OpenAIUsage {
     total_tokens: u32,
 }
 
+#[derive(Deserialize)]
+struct OpenAIErrorResponse {
+    error: OpenAIErrorDetail,
+}
+
+#[derive(Deserialize)]
+struct OpenAIErrorDetail {
+    message: String,
+    #[allow(dead_code)]
+    #[serde(rename = "type")]
+    error_type: Option<String>,
+    #[allow(dead_code)]
+    code: Option<String>,
+}
+
 impl OpenAIClient {
     pub fn new(api_key: String) -> Self {
+        Self::with_timeout(api_key, Duration::from_secs(30))
+    }
+
+    pub fn with_timeout(api_key: String, timeout: Duration) -> Self {
+        let client = Client::builder()
+            .timeout(timeout)
+            .build()
+            .expect("failed to build HTTP client");
+
         Self {
             api_key,
             base_url: "https://api.openai.com/v1".to_string(),
-            client: Client::new(),
+            client,
         }
     }
 
@@ -60,6 +85,55 @@ impl OpenAIClient {
         let api_key = std::env::var("OPENAI_API_KEY")
             .map_err(|_| anyhow::anyhow!("OPENAI_API_KEY environment variable not set"))?;
         Ok(Self::new(api_key))
+    }
+
+    /// Parse OpenAI error response and convert to typed error
+    async fn parse_error_response(
+        status: reqwest::StatusCode,
+        response: reqwest::Response,
+    ) -> LlmError {
+        let status_code = status.as_u16();
+
+        // Try to parse OpenAI error format
+        if let Ok(error_response) = response.json::<OpenAIErrorResponse>().await {
+            let message = error_response.error.message;
+
+            match status_code {
+                401 => LlmError::AuthenticationFailed { message },
+                429 => {
+                    // Parse retry-after from message if present
+                    let retry_after = message
+                        .split("try again in ")
+                        .nth(1)
+                        .and_then(|s| s.split('s').next())
+                        .and_then(|s| s.trim().parse::<u64>().ok());
+
+                    LlmError::RateLimit {
+                        message: format!("Rate limit exceeded. {}", message),
+                        retry_after,
+                    }
+                }
+                _ => LlmError::ApiError {
+                    status: status_code,
+                    message,
+                },
+            }
+        } else {
+            // Fallback for unparseable responses
+            match status_code {
+                401 => LlmError::AuthenticationFailed {
+                    message: "Invalid or expired API key".to_string(),
+                },
+                429 => LlmError::RateLimit {
+                    message: "Rate limit exceeded".to_string(),
+                    retry_after: None,
+                },
+                _ => LlmError::ApiError {
+                    status: status_code,
+                    message: format!("HTTP {}", status_code),
+                },
+            }
+        }
     }
 }
 
@@ -86,22 +160,26 @@ impl LlmClient for OpenAIClient {
 
         let response = self
             .client
-            .post(&format!("{}/chat/completions", self.base_url))
+            .post(format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&openai_req)
             .send()
             .await
-            .map_err(|e| anyhow::anyhow!("HTTP request failed: {}", e))?;
+            .map_err(|e| {
+                if e.is_timeout() {
+                    LlmError::Timeout { timeout_secs: 30 }
+                } else if e.is_connect() || e.is_request() {
+                    LlmError::NetworkError(format!("Failed to connect to OpenAI API: {}", e))
+                } else {
+                    LlmError::ClientError(format!("HTTP request failed: {}", e))
+                }
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!(
-                "OpenAI API error {}: {}",
-                status,
-                error_text
-            ));
+            let error = Self::parse_error_response(status, response).await;
+            return Err(error.into());
         }
 
         let openai_response: OpenAIResponse = response

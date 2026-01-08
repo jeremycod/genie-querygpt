@@ -43,13 +43,24 @@ REQUIRED OUTPUT FORMAT:
   "notes": "optional explanation"
 }}
 
-CRITICAL RULES:
-1. "select" array MUST contain at least one field from the SCHEMA SUMMARY above
-2. All field names MUST exist in the schema (see SCHEMA SUMMARY section)
-3. Use lowercase for "op" values: "eq", "in", "overlaps", "gte", "lte"
-4. Use lowercase for "dir" values: "asc", "desc"
-5. "filters" and "order_by" can be empty arrays [] if not needed
-6. Only output valid JSON - no explanations outside the JSON structure
+CRITICAL RULES (YOU MUST FOLLOW THESE):
+⚠️  SCHEMA CORRECTNESS:
+1. "select" array MUST NOT be empty - include at least one field
+2. ALL field names MUST exist in the SCHEMA SUMMARY above (verify each field!)
+3. NEVER use field names not listed in the schema
+4. If a field is used in "order_by", it MUST also appear in "select"
+
+⚠️  FORMAT CORRECTNESS:
+5. Use lowercase for "op" values: "eq", "in", "overlaps", "gte", "lte"
+6. Use lowercase for "dir" values: "asc", "desc"
+7. "filters" and "order_by" can be empty arrays [] if not needed
+8. Only output valid JSON - no explanations outside the JSON structure
+
+⚠️  COMMON MISTAKES TO AVOID:
+- ❌ Empty "select" array
+- ❌ Using fields not in schema
+- ❌ ORDER BY fields missing from SELECT
+- ❌ Uppercase operator names (use "eq" not "Eq")
 
 FILTER OPERATORS (lowercase):
 - "eq": Equal to
@@ -100,12 +111,24 @@ REQUIRED OUTPUT FORMAT:
   "notes": "explanation of fixes made"
 }}
 
-CRITICAL RULES:
-1. "select" array MUST contain at least one field from the SCHEMA SUMMARY above
-2. All field names MUST exist in the schema (see SCHEMA SUMMARY section)
-3. Use lowercase for "op" values: "eq", "in", "overlaps", "gte", "lte"
-4. Use lowercase for "dir" values: "asc", "desc"
-5. "filters" and "order_by" can be empty arrays [] if not needed
+CRITICAL RULES (YOU MUST FOLLOW THESE):
+⚠️  SCHEMA CORRECTNESS:
+1. "select" array MUST NOT be empty - include at least one field
+2. ALL field names MUST exist in the SCHEMA SUMMARY above (verify each field!)
+3. NEVER use field names not listed in the schema
+4. If a field is used in "order_by", it MUST also appear in "select"
+
+⚠️  FORMAT CORRECTNESS:
+5. Use lowercase for "op" values: "eq", "in", "overlaps", "gte", "lte"
+6. Use lowercase for "dir" values: "asc", "desc"
+7. "filters" and "order_by" can be empty arrays [] if not needed
+8. Only output valid JSON - no explanations outside the JSON structure
+
+⚠️  COMMON MISTAKES TO AVOID:
+- ❌ Empty "select" array
+- ❌ Using fields not in schema
+- ❌ ORDER BY fields missing from SELECT
+- ❌ Uppercase operator names (use "eq" not "Eq")
 
 FILTER OPERATORS (lowercase):
 - "eq": Equal to
