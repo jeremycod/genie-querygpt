@@ -101,6 +101,29 @@ impl CompilerDiagnostics {
 
     /// Create unknown field diagnostic
     pub fn unknown_field(field: String, context: &'static str) -> Self {
+        let mut help = Vec::new();
+
+        // If field contains dot or SQL qualifier, provide specific guidance
+        if field.contains('.') {
+            help.push(
+                "❌ NEVER use SQL-qualified names like 'o.id', 'c.name', 'table.field'".to_string(),
+            );
+            help.push(
+                "✅ Use ONLY logical field names: 'id', 'name', 'brand', 'status'".to_string(),
+            );
+
+            // Try to suggest the fix
+            if let Some((_table, field_part)) = field.rsplit_once('.') {
+                help.push(format!(
+                    "Suggestion: Remove table prefix, use '{}' instead of '{}'",
+                    field_part, field
+                ));
+            }
+        } else {
+            help.push("Check available fields in the schema".to_string());
+            help.push("Verify field name spelling".to_string());
+        }
+
         Self::error(Diagnostic {
             code: DiagnosticCode::UnknownField,
             message: format!("unknown field '{field}' in {context}"),
@@ -111,10 +134,7 @@ impl CompilerDiagnostics {
                 "field": field,
                 "context": context
             }),
-            help: vec![
-                "Check available fields in the schema".to_string(),
-                "Verify field name spelling".to_string(),
-            ],
+            help,
         })
     }
 

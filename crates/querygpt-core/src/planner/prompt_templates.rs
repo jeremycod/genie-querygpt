@@ -27,6 +27,16 @@ WORKSPACE: {}
 {}
 {}
 
+🚨 CRITICAL FIELD NAME RULES 🚨
+NEVER use SQL-qualified names! Use ONLY logical field names from the schema:
+  ✅ CORRECT: "id", "name", "brand", "status", "startDate", "campaign_id", "campaign_name"
+  ❌ WRONG: "o.id", "c.name", "offers_latest.id", "campaigns_latest.brand"
+  ❌ WRONG: ANY field with dots (.), prefixes, or table names
+
+If you see a field like "o.id" in your output, it's WRONG. Use "id" instead.
+If you see "c.brand", it's WRONG. Use "brand" instead.
+If you see "campaigns_latest.name", it's WRONG. Use "campaign_name" instead.
+
 REQUIRED OUTPUT FORMAT:
 {{
   "report_spec": {{
@@ -49,10 +59,6 @@ REQUIRED OUTPUT FORMAT:
   "open_questions": ["list any unclear requirements"],
   "notes": "optional explanation"
 }}
-
-FIELD NAME EXAMPLES (use these patterns):
-✅ CORRECT: "id", "name", "brand", "start_date", "end_date", "status", "countries"
-❌ WRONG: "o.id", "c.name", "campaigns_latest.brand", "offers.start_date"
 
 CRITICAL RULES (YOU MUST FOLLOW THESE):
 ⚠️  SCHEMA CORRECTNESS:
@@ -206,14 +212,18 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
     /// Format schema summary for LLM context
     fn format_schema_summary(schema: &SchemaSummary) -> String {
         let mut result = String::from("SCHEMA SUMMARY:\n");
+        result.push_str("⚠️  IMPORTANT: Use field names directly (e.g., 'id', 'name'). DO NOT prefix with table name or alias!\n\n");
 
         // Format tables and fields
         for table in &schema.tables {
-            result.push_str(&format!("Table: {} (alias: {})\n", table.name, table.alias));
+            result.push_str(&format!(
+                "Table: {} (SQL alias for internal use: {})\n",
+                table.name, table.alias
+            ));
             if let Some(desc) = &table.description {
                 result.push_str(&format!("  Description: {}\n", desc));
             }
-            result.push_str("  Fields:\n");
+            result.push_str("  Available Fields (use these names directly, NO table prefix):\n");
             for field in &table.fields {
                 let nullable = if field.nullable {
                     "nullable"

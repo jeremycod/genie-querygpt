@@ -288,22 +288,42 @@ COMPILER ERRORS: {}
 CONSTRAINTS:
 - Output valid JSON matching the schema
 - Use only fields/tables from schema summary
-- Use LOGICAL field names ONLY (e.g., "brand", "id", "name")
-- NEVER use SQL-qualified names like "o.id" or "c.brand"
 - Fix the errors mentioned above
 - No SQL generation
+
+🚨 FIELD NAME RULES - PAY ATTENTION 🚨
+If error says 'unknown field "o.id"' → Use "id" instead
+If error says 'unknown field "c.name"' → Use "campaign_name" instead
+If error says 'unknown field "offers_latest.status"' → Use "status" instead
+If error says 'unknown field "campaigns_latest.brand"' → Use "brand" instead
+
+NEVER use:
+  ❌ "o.id", "o.name", "o.status"
+  ❌ "c.id", "c.name", "c.brand"
+  ❌ Any field with dots (.) or table prefixes
+
+ALWAYS use:
+  ✅ "id", "name", "status", "brand", "startDate", "campaign_id", "campaign_name"
 
 WORKSPACE: {}
 AVAILABLE_TABLES: {}
 AVAILABLE_FIELDS: {}
 
-REQUIRED OUTPUT FORMAT:
+REQUIRED OUTPUT FORMAT (COPY THIS STRUCTURE EXACTLY):
 {{
   "report_spec": {{
     "version": 1,
     "workspace": "{}",
-    "select": [{{"field": "field_name", "alias": null}}],
-    "filters": [],
+    "select": [
+      {{"field": "id", "alias": null}},
+      {{"field": "name", "alias": null}},
+      {{"field": "startDate", "alias": null}}
+    ],
+    "filters": [
+      {{"field": "brand", "op": "eq", "value": "ESPN"}},
+      {{"field": "status", "op": "in", "value": ["LIVE"]}},
+      {{"field": "startDate", "op": "gte", "value": "2025-01-01"}}
+    ],
     "order_by": [],
     "mode": "preview",
     "pagination": null
@@ -312,6 +332,12 @@ REQUIRED OUTPUT FORMAT:
   "open_questions": ["list any unclear requirements"],
   "notes": "explanation of fixes made"
 }}
+
+CRITICAL JSON SCHEMA RULES:
+- Filter operator key is "op" (not "operator"!)
+- Valid "op" values: "eq", "in", "overlaps", "gt", "gte", "lt", "lte" (lowercase!)
+- Do NOT add fields like "condition" - they don't exist in the schema
+- "filters" is an array of objects with "field", "op", and "value" only
 
 IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
             format!("{:?}", diagnostics),
