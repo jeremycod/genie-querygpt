@@ -55,6 +55,8 @@ CRITICAL RULES (YOU MUST FOLLOW THESE):
 6. Use lowercase for "dir" values: "asc", "desc"
 7. "filters" and "order_by" can be empty arrays [] if not needed
 8. Only output valid JSON - no explanations outside the JSON structure
+9. CRITICAL: Close all arrays with ] before closing objects with }}
+10. For long country arrays, maintain valid JSON structure
 
 ⚠️  COMMON MISTAKES TO AVOID:
 - ❌ Empty "select" array
@@ -62,12 +64,16 @@ CRITICAL RULES (YOU MUST FOLLOW THESE):
 - ❌ ORDER BY fields missing from SELECT
 - ❌ Uppercase operator names (use "eq" not "Eq")
 
-FILTER OPERATORS (lowercase):
-- "eq": Equal to
+FILTER OPERATORS (lowercase only):
+- "eq": Equal to (for NULL checks use "eq" with value: null, generates IS NULL)
 - "in": In list (value must be array)
-- "overlaps": Overlaps with (for array fields)
+- "overlaps": Overlaps with (for array fields, value must be array)
 - "gte": Greater than or equal
 - "lte": Less than or equal
+
+NULL CHECKS:
+- To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
+- NEVER use "isnull" or "is_null" as operators - use "eq" with null value
 
 REGION TO COUNTRY MAPPING:
 When users mention regions, expand them to ISO 3166-1 alpha-2 country codes:
@@ -132,6 +138,8 @@ CRITICAL RULES (YOU MUST FOLLOW THESE):
 6. Use lowercase for "dir" values: "asc", "desc"
 7. "filters" and "order_by" can be empty arrays [] if not needed
 8. Only output valid JSON - no explanations outside the JSON structure
+9. CRITICAL: Close all arrays with ] before closing objects with }}
+10. For long country arrays, maintain valid JSON structure
 
 ⚠️  COMMON MISTAKES TO AVOID:
 - ❌ Empty "select" array
@@ -139,12 +147,16 @@ CRITICAL RULES (YOU MUST FOLLOW THESE):
 - ❌ ORDER BY fields missing from SELECT
 - ❌ Uppercase operator names (use "eq" not "Eq")
 
-FILTER OPERATORS (lowercase):
-- "eq": Equal to
+FILTER OPERATORS (lowercase only):
+- "eq": Equal to (for NULL checks use "eq" with value: null, generates IS NULL)
 - "in": In list (value must be array)
-- "overlaps": Overlaps with (for array fields)
+- "overlaps": Overlaps with (for array fields, value must be array)
 - "gte": Greater than or equal
 - "lte": Less than or equal
+
+NULL CHECKS:
+- To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
+- NEVER use "isnull" or "is_null" as operators - use "eq" with null value
 
 IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
             original_prompt,

@@ -135,7 +135,7 @@ fn build_fixture_planner() -> FixturePlanner {
                 },
             ],
             filters: vec![Filter {
-                field: "campaign_deleted".to_string(),
+                field: "deleted".to_string(),
                 op: FilterOp::Eq,
                 value: json!(false),
             }],
@@ -188,7 +188,7 @@ fn build_fixture_planner() -> FixturePlanner {
                 },
             ],
             filters: vec![Filter {
-                field: "offer_deleted".to_string(),
+                field: "deleted".to_string(),
                 op: FilterOp::Eq,
                 value: json!(false),
             }],
@@ -491,11 +491,11 @@ fn build_example_queries() -> Vec<querygpt_core::planner::schema_summary::Exampl
                 pagination: None,
             },
         },
-        // Example 10: Combined filters with ORDER BY (comprehensive)
+        // Example 10: NULL check with eq operator
         ExamplePair {
-            prompt: "show active offers in Europe ordered by name".to_string(),
+            prompt: "show offers that have not expired yet".to_string(),
             description:
-                "Combine filters (boolean, array) with ordering - all referenced fields in SELECT"
+                "NULL checks use 'eq' operator with null value - NEVER use 'isnull' operator"
                     .to_string(),
             spec: ReportSpec {
                 version: 1,
@@ -510,7 +510,7 @@ fn build_example_queries() -> Vec<querygpt_core::planner::schema_summary::Exampl
                         alias: None,
                     },
                     SelectItem {
-                        field: "countries".to_string(),
+                        field: "endDate".to_string(),
                         alias: None,
                     },
                     SelectItem {
@@ -520,20 +520,12 @@ fn build_example_queries() -> Vec<querygpt_core::planner::schema_summary::Exampl
                 ],
                 filters: vec![
                     Filter {
-                        field: "deleted".to_string(),
+                        field: "endDate".to_string(),
                         op: FilterOp::Eq,
-                        value: json!(false),
-                    },
-                    Filter {
-                        field: "countries".to_string(),
-                        op: FilterOp::Overlaps,
-                        value: json!(["DE", "FR", "GB"]),
+                        value: json!(null),
                     },
                 ],
-                order_by: vec![OrderBy {
-                    field: "name".to_string(),
-                    dir: SortDir::Asc,
-                }],
+                order_by: vec![],
                 mode: Mode::Preview,
                 pagination: None,
             },
