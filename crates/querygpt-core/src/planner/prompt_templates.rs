@@ -27,14 +27,31 @@ WORKSPACE: {}
 {}
 {}
 
+🚨 CRITICAL FIELD NAME RULES 🚨
+NEVER use SQL-qualified names! Use ONLY logical field names from the schema:
+  ✅ CORRECT: "id", "name", "brand", "status", "startDate", "campaign_id", "campaign_name"
+  ❌ WRONG: "o.id", "c.name", "offers_latest.id", "campaigns_latest.brand"
+  ❌ WRONG: ANY field with dots (.), prefixes, or table names
+
+If you see a field like "o.id" in your output, it's WRONG. Use "id" instead.
+If you see "c.brand", it's WRONG. Use "brand" instead.
+If you see "campaigns_latest.name", it's WRONG. Use "campaign_name" instead.
+
 REQUIRED OUTPUT FORMAT:
 {{
   "report_spec": {{
     "version": 1,
     "workspace": "{}",
-    "select": [{{"field": "field_name", "alias": null}}],
-    "filters": [],
-    "order_by": [],
+    "select": [
+      {{"field": "id", "alias": null}},
+      {{"field": "name", "alias": null}},
+      {{"field": "brand", "alias": null}}
+    ],
+    "filters": [
+      {{"field": "brand", "op": "eq", "value": "ESPN"}},
+      {{"field": "start_date", "op": "gte", "value": "2025-01-01"}}
+    ],
+    "order_by": [{{"field": "id", "dir": "asc"}}],
     "mode": "preview",
     "pagination": null
   }},
@@ -43,7 +60,57 @@ REQUIRED OUTPUT FORMAT:
   "notes": "optional explanation"
 }}
 
-IMPORTANT: Only output valid JSON. No explanations outside the JSON structure."#,
+CRITICAL RULES (YOU MUST FOLLOW THESE):
+⚠️  SCHEMA CORRECTNESS:
+1. "select" array MUST NOT be empty - include at least one field
+2. ALL field names MUST exist in the SCHEMA SUMMARY above (verify each field!)
+3. NEVER use field names not listed in the schema
+4. If a field is used in "order_by", it MUST also appear in "select"
+5. CRITICAL: Use ONLY the logical field names from the schema (e.g., "brand", "id", "name")
+6. NEVER use SQL-qualified names (❌ WRONG: "o.id", "c.brand" ✅ CORRECT: "id", "brand")
+
+⚠️  FORMAT CORRECTNESS:
+5. Use lowercase for "op" values: "eq", "in", "overlaps", "gt", "gte", "lt", "lte"
+6. Use lowercase for "dir" values: "asc", "desc"
+7. "filters" and "order_by" can be empty arrays [] if not needed
+8. Only output valid JSON - no explanations outside the JSON structure
+9. CRITICAL: Close all arrays with ] before closing objects with }}
+10. For long country arrays, maintain valid JSON structure
+
+⚠️  COMMON MISTAKES TO AVOID:
+- ❌ Empty "select" array
+- ❌ Using fields not in schema
+- ❌ ORDER BY fields missing from SELECT
+- ❌ Uppercase operator names (use "eq" not "Eq")
+
+FILTER OPERATORS (lowercase only):
+- "eq": Equal to (for NULL checks use "eq" with value: null, generates IS NULL)
+- "in": In list (value must be array)
+- "overlaps": Overlaps with (for array fields, value must be array)
+- "gt": Greater than (for dates, numbers)
+- "gte": Greater than or equal (for dates, numbers)
+- "lt": Less than (for dates, numbers)
+- "lte": Less than or equal (for dates, numbers)
+
+NULL CHECKS:
+- To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
+- NEVER use "isnull" or "is_null" as operators - use "eq" with null value
+
+REGION TO COUNTRY MAPPING:
+When users mention regions, expand them to ISO 3166-1 alpha-2 country codes:
+- APAC (Asia-Pacific): ["AF","AU","BD","BT","BN","KH","CN","HK","IN","ID","JP","KI","KP","KR","LA","MY","MV","MN","MM","NP","NZ","PK","PG","PH","SG","SB","LK","TW","TH","TL","VU","VN"]
+- EMEA (Europe/Middle East/Africa): ["AL","DZ","AD","AO","AM","AT","AZ","BH","BY","BE","BA","BW","BG","BI","CM","CV","CF","TD","KM","CG","HR","CY","CZ","DK","DJ","EG","GQ","ER","EE","ET","FI","FR","GA","GM","GE","DE","GH","GR","GN","GW","HU","IS","IR","IQ","IE","IL","IT","CI","JO","KZ","KE","KW","KG","LV","LB","LS","LR","LY","LI","LT","LU","MK","MG","MW","ML","MT","MR","MU","MD","MC","ME","MA","MZ","NA","NL","NE","NG","NO","OM","PS","PL","PT","QA","RO","RU","RW","ST","SA","SN","RS","SC","SL","SK","SI","SO","ZA","SS","ES","SD","SZ","SE","CH","SY","TJ","TZ","TG","TN","TR","TM","UG","UA","AE","GB","UZ","VA","YE","ZM","ZW"]
+- LATAM (Latin America): ["AR","BZ","BO","BR","CL","CO","CR","CU","DO","EC","SV","GT","HT","HN","MX","NI","PA","PY","PE","UY","VE"]
+- NA (North America): ["US","CA"]
+
+IMPORTANT: Always use country codes, never use region names as literal values!
+
+BRAND FILTERING (ESPN, DISNEY, STAR, HULU):
+When users ask for offers by brand (ESPN, DISNEY, STAR, HULU):
+- Use the "brand" field in filters: {{"field": "brand", "op": "eq", "value": "ESPN"}}
+- Brand values are uppercase: "ESPN", "DISNEY", "STAR", "HULU"
+- The system will automatically handle joins between campaigns and offers
+- Example: "ESPN offers" → {{"field": "brand", "op": "eq", "value": "ESPN"}}"#,
             constraints_info, ctx.workspace, schema_info, examples_info, ctx.workspace
         )
     }
@@ -76,9 +143,9 @@ REQUIRED OUTPUT FORMAT:
   "report_spec": {{
     "version": 1,
     "workspace": "{}",
-    "select": [{{"field": "field_name", "alias": null}}],
-    "filters": [],
-    "order_by": [],
+    "select": [{{"field": "actual_field_from_schema", "alias": null}}],
+    "filters": [{{"field": "field_name", "op": "eq", "value": "example_value"}}],
+    "order_by": [{{"field": "field_name", "dir": "asc"}}],
     "mode": "preview",
     "pagination": null
   }},
@@ -86,6 +153,42 @@ REQUIRED OUTPUT FORMAT:
   "open_questions": ["list any unclear requirements"],
   "notes": "explanation of fixes made"
 }}
+
+CRITICAL RULES (YOU MUST FOLLOW THESE):
+⚠️  SCHEMA CORRECTNESS:
+1. "select" array MUST NOT be empty - include at least one field
+2. ALL field names MUST exist in the SCHEMA SUMMARY above (verify each field!)
+3. NEVER use field names not listed in the schema
+4. If a field is used in "order_by", it MUST also appear in "select"
+5. CRITICAL: Use ONLY the logical field names from the schema (e.g., "brand", "id", "name")
+6. NEVER use SQL-qualified names (❌ WRONG: "o.id", "c.brand" ✅ CORRECT: "id", "brand")
+
+⚠️  FORMAT CORRECTNESS:
+5. Use lowercase for "op" values: "eq", "in", "overlaps", "gt", "gte", "lt", "lte"
+6. Use lowercase for "dir" values: "asc", "desc"
+7. "filters" and "order_by" can be empty arrays [] if not needed
+8. Only output valid JSON - no explanations outside the JSON structure
+9. CRITICAL: Close all arrays with ] before closing objects with }}
+10. For long country arrays, maintain valid JSON structure
+
+⚠️  COMMON MISTAKES TO AVOID:
+- ❌ Empty "select" array
+- ❌ Using fields not in schema
+- ❌ ORDER BY fields missing from SELECT
+- ❌ Uppercase operator names (use "eq" not "Eq")
+
+FILTER OPERATORS (lowercase only):
+- "eq": Equal to (for NULL checks use "eq" with value: null, generates IS NULL)
+- "in": In list (value must be array)
+- "overlaps": Overlaps with (for array fields, value must be array)
+- "gt": Greater than (for dates, numbers)
+- "gte": Greater than or equal (for dates, numbers)
+- "lt": Less than (for dates, numbers)
+- "lte": Less than or equal (for dates, numbers)
+
+NULL CHECKS:
+- To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
+- NEVER use "isnull" or "is_null" as operators - use "eq" with null value
 
 IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
             original_prompt,
@@ -109,14 +212,18 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
     /// Format schema summary for LLM context
     fn format_schema_summary(schema: &SchemaSummary) -> String {
         let mut result = String::from("SCHEMA SUMMARY:\n");
+        result.push_str("⚠️  IMPORTANT: Use field names directly (e.g., 'id', 'name'). DO NOT prefix with table name or alias!\n\n");
 
         // Format tables and fields
         for table in &schema.tables {
-            result.push_str(&format!("Table: {} (alias: {})\n", table.name, table.alias));
+            result.push_str(&format!(
+                "Table: {} (SQL alias for internal use: {})\n",
+                table.name, table.alias
+            ));
             if let Some(desc) = &table.description {
                 result.push_str(&format!("  Description: {}\n", desc));
             }
-            result.push_str("  Fields:\n");
+            result.push_str("  Available Fields (use these names directly, NO table prefix):\n");
             for field in &table.fields {
                 let nullable = if field.nullable {
                     "nullable"

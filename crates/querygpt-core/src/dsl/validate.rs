@@ -119,7 +119,7 @@ fn validate_filter_op(field: &str, ty: FieldType, op: FilterOp) -> Result<(), Sp
         (StringArray, Overlaps) => true,
 
         // comparisons for dates/numbers
-        (Date | Number, Gte | Lte) => true,
+        (Date | Number, Gt | Gte | Lt | Lte) => true,
 
         _ => false,
     };
@@ -201,7 +201,7 @@ fn validate_filter_value(
             }
         }
 
-        (Number | Date, Gte | Lte) => {
+        (Number | Date, Gt | Gte | Lt | Lte) => {
             // simplest: accept string for Date and number for Number
             match ty {
                 Number => {

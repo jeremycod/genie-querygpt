@@ -51,7 +51,9 @@ pub enum FilterOp {
     Eq,
     In,
     Overlaps,
+    Gt,
     Gte,
+    Lt,
     Lte,
 }
 

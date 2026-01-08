@@ -196,9 +196,9 @@ async fn orchestration_compile_only_path() {
             alias: None,
         }],
         filters: vec![Filter {
-            field: "region".to_string(),
+            field: "deleted".to_string(),
             op: FilterOp::Eq,
-            value: serde_json::Value::String("APAC".to_string()),
+            value: serde_json::Value::Bool(false),
         }],
         order_by: vec![],
         mode: Mode::Preview,

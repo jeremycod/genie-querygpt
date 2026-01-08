@@ -106,6 +106,90 @@
           "path": "$.packageId",
           "data_type": "string",
           "description": "Package id, used in exports"
+        },
+        {
+          "column": "attributes",
+          "path": "$.startDate",
+          "data_type": "timestamp",
+          "description": "Offer start date (source of truth - use this instead of start_date column)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.endDate",
+          "data_type": "timestamp",
+          "description": "Offer end date (source of truth - use this instead of end_date column)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.status",
+          "data_type": "array",
+          "description": "Offer status (source of truth - use this instead of status column)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.countries",
+          "data_type": "array",
+          "description": "Countries where offer is available (source of truth - use this instead of countries column)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.offerType",
+          "data_type": "array",
+          "description": "Type of offer (e.g., IAP)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.priceType",
+          "data_type": "array",
+          "description": "Pricing model (e.g., RETAIL)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.billingFrequency",
+          "data_type": "array",
+          "description": "Billing frequency (e.g., NONE, MONTHLY, YEAR)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.l4l",
+          "data_type": "array",
+          "description": "L4L flag"
+        },
+        {
+          "column": "attributes",
+          "path": "$.labels",
+          "data_type": "array",
+          "description": "Offer labels (e.g., base, presentation_addon)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.saleType",
+          "data_type": "array",
+          "description": "Sale type (e.g., PRESENTATION_ADD_ON)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.offer_tag",
+          "data_type": "array",
+          "description": "Offer tag"
+        },
+        {
+          "column": "attributes",
+          "path": "$.currencyCode",
+          "data_type": "array",
+          "description": "Currency code (e.g., USD)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.stackingAllowed",
+          "data_type": "array",
+          "description": "Whether offer stacking is allowed"
+        },
+        {
+          "column": "attributes",
+          "path": "$.paymentMethodRequired",
+          "data_type": "array",
+          "description": "Whether payment method is required"
         }
       ],
       "common_filters": [
@@ -178,7 +262,116 @@
           "pii": false
         }
       ],
-      "json_paths": [],
+      "json_paths": [
+        {
+          "column": "attributes",
+          "path": "$.brand",
+          "data_type": "array",
+          "description": "Brand (e.g., DISNEY, HULU, ESPN)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.status",
+          "data_type": "array",
+          "description": "Campaign status (e.g., LIVE)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.startDate",
+          "data_type": "timestamp",
+          "description": "Campaign start date"
+        },
+        {
+          "column": "attributes",
+          "path": "$.endDate",
+          "data_type": "timestamp",
+          "description": "Campaign end date"
+        },
+        {
+          "column": "attributes",
+          "path": "$.partner",
+          "data_type": "array",
+          "description": "Partner name (e.g., hulu, TWDC - Gift Campaign)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.countries",
+          "data_type": "array",
+          "description": "Countries where campaign is available"
+        },
+        {
+          "column": "attributes",
+          "path": "$.platforms",
+          "data_type": "array",
+          "description": "Platforms (e.g., WEB, ROKU_VERIFIABLE, SAMSUNG_TIZEN, XBOX)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.providers",
+          "data_type": "array",
+          "description": "Providers (e.g., PROVIDER_NO_PAYMENT)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.billingType",
+          "data_type": "array",
+          "description": "Billing type (e.g., BILLING_D2C)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.purchaseFlows",
+          "data_type": "array",
+          "description": "Purchase flows (e.g., signup, landing, redemption)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.landingURL",
+          "data_type": "array",
+          "description": "Landing URL for campaign"
+        },
+        {
+          "column": "attributes",
+          "path": "$.hisufPackages",
+          "data_type": "array",
+          "description": "HISUF packages (e.g., disney_duo_basic)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.allowPromoSubs",
+          "data_type": "array",
+          "description": "Whether promotional subscriptions are allowed"
+        },
+        {
+          "column": "attributes",
+          "path": "$.destinationCampaignId",
+          "data_type": "array",
+          "description": "Destination campaign ID"
+        },
+        {
+          "column": "attributes",
+          "path": "$.hasSignupFlow",
+          "data_type": "array",
+          "description": "Whether campaign has signup flow"
+        },
+        {
+          "column": "attributes",
+          "path": "$.referenceLinks",
+          "data_type": "array",
+          "description": "Reference links (JIRA tickets, docs, runbooks)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.requires_redemption_code",
+          "data_type": "array",
+          "description": "Whether redemption code is required"
+        },
+        {
+          "column": "attributes",
+          "path": "$.requires_payment_instrument",
+          "data_type": "array",
+          "description": "Whether payment instrument is required"
+        }
+      ],
       "common_filters": [
         {
           "name": "profile_main",

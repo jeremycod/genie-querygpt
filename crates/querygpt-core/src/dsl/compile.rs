@@ -44,6 +44,25 @@ fn field_alias(field: &str) -> Option<&str> {
     field.split('.').next()
 }
 
+/// Convert snake_case to camelCase for JSONB field matching
+fn to_camel_case(s: &str) -> String {
+    let mut result = String::new();
+    let mut capitalize_next = false;
+
+    for ch in s.chars() {
+        if ch == '_' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            result.push(ch.to_ascii_uppercase());
+            capitalize_next = false;
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
 fn normalize_join_condition_for_aliases(
     left_alias: &str,
     right_alias: &str,
@@ -67,24 +86,73 @@ fn normalize_join_condition_for_aliases(
     }
 }
 
-/// Translate a single field name into its SQL expression, reusing the same logic as in projections.
-/// Uses the alias_map to prefix columns and derives JSON paths where needed.
-fn field_to_sql_expr(field: &str, alias_map: &HashMap<String, String>) -> Option<String> {
-    Some(match field {
-        // Direct fields on known entities
-        "partnership_id" => format!("{}.id", alias_map.get("partners")?),
-        "campaign_id" => format!("{}.id", alias_map.get("campaigns_latest")?),
-        "campaign_name" => format!("{}.name", alias_map.get("campaigns_latest")?),
-        "offer_id" => format!("{}.id", alias_map.get("offers_latest")?),
-        "offer_name" => format!("{}.name", alias_map.get("offers_latest")?),
-        "workflow_status" => format!("{}.status", alias_map.get("offers_latest")?),
-        "countries" => format!("{}.countries", alias_map.get("offers_latest")?),
-        "package_id" => format!(
-            "{}.attributes ->> 'packageId'",
-            alias_map.get("offers_latest")?
-        ),
-        other => other.to_string(), // fallback to raw field name
-    })
+/// Translate a single field name into its SQL expression.
+/// Uses schema cards to determine if field is a JSONB path or direct column.
+/// Priority: 1) Semantic mappings, 2) JSONB paths, 3) Direct columns
+fn field_to_sql_expr(
+    field: &str,
+    alias_map: &HashMap<String, String>,
+    cards: &SchemaCards,
+) -> Option<String> {
+    // Priority 1: Semantic mappings (explicit user-friendly names - highest priority)
+    // These are well-known field names that map to specific columns
+    let semantic_result = match field {
+        "partnership_id" => alias_map.get("partners").map(|a| format!("{}.id", a)),
+        "campaign_id" => alias_map
+            .get("campaigns_latest")
+            .map(|a| format!("{}.id", a)),
+        "campaign_name" => alias_map
+            .get("campaigns_latest")
+            .map(|a| format!("{}.name", a)),
+        "offer_id" => alias_map.get("offers_latest").map(|a| format!("{}.id", a)),
+        "offer_name" => alias_map
+            .get("offers_latest")
+            .map(|a| format!("{}.name", a)),
+        "workflow_status" => alias_map
+            .get("offers_latest")
+            .map(|a| format!("{}.status", a)),
+        "promo_type" => Some("promo_type".to_string()), // Special: resolved in filter translation
+        _ => None,
+    };
+    if semantic_result.is_some() {
+        return semantic_result;
+    }
+
+    // Priority 2: Check json_paths in schema (source of truth for JSONB attributes)
+    // Try both exact match and camelCase conversion (e.g., package_id → packageId)
+    // ALL JSONB fields are stored as arrays, even single-value fields like brand, startDate
+    let field_camel = to_camel_case(field);
+    for entity in &cards.entities {
+        if let Some(alias) = alias_map.get(&entity.name) {
+            for json_path in &entity.json_paths {
+                // Extract field name from $.fieldName
+                let path_field = json_path.path.trim_start_matches("$.");
+                if path_field == field || path_field == field_camel {
+                    // All JSONB attributes are stored as arrays - return base path (-> 'field')
+                    // Callers will add ->> 0 for single-value arrays or use ?| for multi-value
+                    return Some(format!(
+                        "{}.{} -> '{}'",
+                        alias, json_path.column, path_field
+                    ));
+                }
+            }
+        }
+    }
+
+    // Priority 3: Check direct columns (skip promoted columns: start_date, end_date, status, countries)
+    let skip_direct_columns = ["start_date", "end_date", "status", "countries"];
+    if !skip_direct_columns.contains(&field) {
+        for entity in &cards.entities {
+            if let Some(alias) = alias_map.get(&entity.name) {
+                if entity.columns.iter().any(|c| c.name == field) {
+                    return Some(format!("{}.{}", alias, field));
+                }
+            }
+        }
+    }
+
+    // Field not found - return None to trigger error
+    None
 }
 
 /// Translate the order_by specifications into PlanOrder entries.
@@ -112,7 +180,7 @@ pub fn translate_ordering(
                         })
                 } else {
                     // For direct fields, map to alias.column or fallback via field_to_sql_expr
-                    field_to_sql_expr(&item.field, alias_map).ok_or_else(|| {
+                    field_to_sql_expr(&item.field, alias_map, cards).ok_or_else(|| {
                         CompilerError::UnknownField {
                             field: item.field.clone(),
                             context: "order_by",
@@ -139,133 +207,106 @@ pub fn translate_ordering(
 ///   - field: the original report field name
 ///   - expression: the SQL expression with table aliases
 ///   - alias: an optional alias provided in the ReportSpec
+/// Helper to check if a field is used with overlaps operator (multi-value array)
+fn is_multivalue_array_field(field: &str, spec: &ReportSpec) -> bool {
+    spec.filters
+        .iter()
+        .any(|f| f.field == field && matches!(f.op, FilterOp::Overlaps))
+}
+
 pub fn translate_projections(
     select: &[SelectItem],
     alias_map: &HashMap<String, String>,
     cards: &SchemaCards,
+    spec: &ReportSpec,
 ) -> CompilerResult<Vec<PlanProjection>> {
     select
         .iter()
         .map(|item| {
             // Determine the SQL expression for this field.
-            let expr = match item.field.as_str() {
-                // Direct fields that map to simple column names
-                "partnership_id" => {
-                    let alias =
-                        alias_map
-                            .get("partners")
-                            .ok_or_else(|| CompilerError::InvalidJoin {
-                                reason: "missing alias for partners when rendering partnership_id"
-                                    .to_string(),
-                            })?;
-                    format!("{}.id", alias)
-                }
-                "campaign_id" => {
-                    let alias = alias_map.get("campaigns_latest").ok_or_else(|| {
-                        CompilerError::InvalidJoin {
-                            reason: "missing alias for campaigns_latest when rendering campaign_id"
-                                .to_string(),
+            let expr =
+                if let Some(df) = cards.derived_fields.iter().find(|df| df.name == item.field) {
+                    // Handle derived fields (expired_or_live_status, products_csv, etc.)
+                    // Replace table names in the derived SQL with aliases
+                    alias_map
+                        .iter()
+                        .fold(df.sql.clone(), |acc, (entity, alias)| {
+                            acc.replace(&format!("{}.", entity), &format!("{}.", alias))
+                        })
+                } else {
+                    // Use centralized field resolution (handles JSONB paths, direct columns, semantic mappings)
+                    field_to_sql_expr(&item.field, alias_map, cards).ok_or_else(|| {
+                        CompilerError::UnknownField {
+                            field: item.field.clone(),
+                            context: "select",
                         }
-                    })?;
-                    format!("{}.id", alias)
-                }
-                "campaign_name" => {
-                    let alias = alias_map.get("campaigns_latest").ok_or_else(|| {
-                        CompilerError::InvalidJoin {
-                            reason:
-                                "missing alias for campaigns_latest when rendering campaign_name"
-                                    .to_string(),
-                        }
-                    })?;
-                    format!("{}.name", alias)
-                }
-                "offer_id" => {
-                    let alias = alias_map.get("offers_latest").ok_or_else(|| {
-                        CompilerError::InvalidJoin {
-                            reason: "missing alias for offers_latest when rendering offer_id"
-                                .to_string(),
-                        }
-                    })?;
-                    format!("{}.id", alias)
-                }
-                "offer_name" => {
-                    let alias = alias_map.get("offers_latest").ok_or_else(|| {
-                        CompilerError::InvalidJoin {
-                            reason: "missing alias for offers_latest when rendering offer_name"
-                                .to_string(),
-                        }
-                    })?;
-                    format!("{}.name", alias)
-                }
-                "workflow_status" => {
-                    // workflow_status is stored in offers_latest.status
-                    let alias = alias_map.get("offers_latest").ok_or_else(|| {
-                        CompilerError::InvalidJoin {
-                            reason:
-                                "missing alias for offers_latest when rendering workflow_status"
-                                    .to_string(),
-                        }
-                    })?;
-                    format!("{}.status", alias)
-                }
-                "countries" => {
-                    let alias = alias_map.get("offers_latest").ok_or_else(|| {
-                        CompilerError::InvalidJoin {
-                            reason: "missing alias for offers_latest when rendering countries"
-                                .to_string(),
-                        }
-                    })?;
-                    format!("{}.countries", alias)
-                }
-                // Derived or special-case fields
-                "package_id" => {
-                    // Map to the JSON path attributes->>'packageId' on offers_latest
-                    let alias = alias_map.get("offers_latest").ok_or_else(|| {
-                        CompilerError::InvalidJoin {
-                            reason: "missing alias for offers_latest when rendering package_id"
-                                .to_string(),
-                        }
-                    })?;
-                    format!("{}.attributes ->> 'packageId'", alias)
-                }
-                // Fields defined in derived_fields (expired_or_live_status, products_csv, etc.)
-                other => {
-                    if let Some(df) = cards.derived_fields.iter().find(|df| df.name == other) {
-                        // Replace table names in the derived SQL with aliases
-                        alias_map
-                            .iter()
-                            .fold(df.sql.clone(), |acc, (entity, alias)| {
-                                acc.replace(&format!("{}.", entity), &format!("{}.", alias))
-                            })
-                    } else {
-                        // Fallback: direct column with field name (for unknown but valid columns)
-                        // Attempt to resolve via resolve_entity and then prefix alias
-                        let entity = resolve_entity(other, cards).ok_or_else(|| {
-                            CompilerError::UnknownField {
-                                field: other.to_string(),
-                                context: "select",
-                            }
-                        })?;
-                        let alias =
-                            alias_map
-                                .get(entity)
-                                .ok_or_else(|| CompilerError::InvalidJoin {
-                                    reason: format!(
-                                        "missing alias for {entity} when rendering {other}"
-                                    ),
-                                })?;
-                        format!("{}.{}", alias, other)
-                    }
-                }
+                    })?
+                };
+
+            // For JSONB single-value array fields, add ->> 0 to extract first element
+            // Multi-value arrays (used with overlaps) keep the full array
+            let expr = if is_jsonb_array_field(&item.field, cards)
+                && !is_multivalue_array_field(&item.field, spec)
+                && expr.contains("->")
+                && !expr.contains("->>")
+            {
+                format!("{} ->> 0", expr)
+            } else {
+                expr
+            };
+
+            // Auto-generate alias for JSON extractions to prevent ?column? in PostgreSQL
+            let alias = if item.alias.is_none() && (expr.contains("->") || expr.contains("->>")) {
+                Some(item.field.clone())
+            } else {
+                item.alias.clone()
             };
 
             Ok(PlanProjection {
                 field: item.field.clone(),
                 expression: expr,
-                alias: item.alias.clone(),
+                alias,
             })
         })
         .collect()
+}
+
+/// Helper to check if a field is a JSONB field (all JSONB fields are stored as arrays)
+fn is_jsonb_array_field(field: &str, cards: &SchemaCards) -> bool {
+    let field_camel = to_camel_case(field);
+    for entity in &cards.entities {
+        for json_path in &entity.json_paths {
+            let path_field = json_path.path.trim_start_matches("$.");
+            if path_field == field || path_field == field_camel {
+                // All JSONB attributes are stored as arrays, regardless of data_type
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Get the JSONB base path for a field (e.g., "o.attributes -> 'brand'")
+fn get_jsonb_base_path(
+    field: &str,
+    alias_map: &HashMap<String, String>,
+    cards: &SchemaCards,
+) -> Option<String> {
+    let field_camel = to_camel_case(field);
+    for entity in &cards.entities {
+        if let Some(alias) = alias_map.get(&entity.name) {
+            for json_path in &entity.json_paths {
+                let path_field = json_path.path.trim_start_matches("$.");
+                if path_field == field || path_field == field_camel {
+                    return Some(format!(
+                        "{}.{} -> '{}'",
+                        alias, json_path.column, path_field
+                    ));
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Translate a single filter into SQL.
@@ -273,17 +314,49 @@ pub fn translate_projections(
 fn translate_filter(
     filter: &Filter,
     alias_map: &HashMap<String, String>,
+    cards: &SchemaCards,
 ) -> CompilerResult<String> {
     // First determine the SQL expression for the field.
-    let column_sql =
-        field_to_sql_expr(&filter.field, alias_map).ok_or_else(|| CompilerError::UnknownField {
+    let column_sql = field_to_sql_expr(&filter.field, alias_map, cards).ok_or_else(|| {
+        CompilerError::UnknownField {
             field: filter.field.clone(),
             context: "filters",
-        })?;
+        }
+    })?;
+
+    // Check if this is a JSONB array field
+    let is_array = is_jsonb_array_field(&filter.field, cards);
 
     match filter.op {
         FilterOp::Eq => {
-            // Expect scalar values; wrap strings in single quotes.
+            // Handle null checks with IS NULL
+            if filter.value.is_null() {
+                return Ok(format!("{} IS NULL", column_sql));
+            }
+
+            // For JSONB array fields, use @> containment operator
+            if is_array {
+                let jsonb_base =
+                    get_jsonb_base_path(&filter.field, alias_map, cards).ok_or_else(|| {
+                        CompilerError::InvalidFilter {
+                            field: filter.field.clone(),
+                        }
+                    })?;
+
+                let rhs = match &filter.value {
+                    Value::String(s) => {
+                        format!("'[\"{}\"]'", s.replace('\'', "''").replace('"', "\\\""))
+                    }
+                    _ => {
+                        return Err(CompilerError::InvalidFilter {
+                            field: filter.field.clone(),
+                        })
+                    }
+                };
+                return Ok(format!("{} @> {}", jsonb_base, rhs));
+            }
+
+            // For non-array fields, use standard equality
             let rhs = match &filter.value {
                 Value::String(s) => format!("'{}'", s.replace('\'', "''")),
                 Value::Bool(b) => b.to_string(),
@@ -306,6 +379,29 @@ fn translate_filter(
                     })
                 }
             };
+
+            // For JSONB array fields, use ?| operator (contains any of)
+            if is_array {
+                let jsonb_base =
+                    get_jsonb_base_path(&filter.field, alias_map, cards).ok_or_else(|| {
+                        CompilerError::InvalidFilter {
+                            field: filter.field.clone(),
+                        }
+                    })?;
+
+                let elements_sql = arr
+                    .iter()
+                    .filter_map(|v| match v {
+                        Value::String(s) => Some(format!("'{}'", s.replace('\'', "''"))),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                return Ok(format!("{} ?| ARRAY[{}]", jsonb_base, elements_sql));
+            }
+
+            // For non-array fields, use standard IN
             let vals_sql = arr
                 .iter()
                 .filter_map(|v| {
@@ -340,15 +436,34 @@ fn translate_filter(
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            Ok(format!("{} && ARRAY[{}]", column_sql, elements_sql))
-        }
-        FilterOp::Gte | FilterOp::Lte => {
-            // Greater-than or less-than comparisons (dates or numbers)
-            let op_str = if matches!(filter.op, FilterOp::Gte) {
-                ">="
+
+            // Check if this is a JSONB field (indicated by -> operator in column_sql)
+            if column_sql.contains("->") {
+                // JSONB field: use ?| operator (JSONB contains any of)
+                // Wrap in parentheses to avoid operator precedence issues
+                Ok(format!("({} ?| ARRAY[{}])", column_sql, elements_sql))
             } else {
-                "<="
+                // Direct array column: use && operator
+                Ok(format!("{} && ARRAY[{}]", column_sql, elements_sql))
+            }
+        }
+        FilterOp::Gt | FilterOp::Gte | FilterOp::Lt | FilterOp::Lte => {
+            // Comparison operators (dates or numbers)
+            let op_str = match filter.op {
+                FilterOp::Gt => ">",
+                FilterOp::Gte => ">=",
+                FilterOp::Lt => "<",
+                FilterOp::Lte => "<=",
+                _ => unreachable!(),
             };
+
+            // For JSONB array fields, add ->> 0 to extract first element for comparison
+            let lhs = if is_array && column_sql.contains("->") && !column_sql.contains("->>") {
+                format!("{} ->> 0", column_sql)
+            } else {
+                column_sql
+            };
+
             let rhs = match &filter.value {
                 Value::String(s) => format!("'{}'", s.replace('\'', "''")),
                 Value::Number(n) => n.to_string(),
@@ -358,7 +473,7 @@ fn translate_filter(
                     })
                 }
             };
-            Ok(format!("{} {} {}", column_sql, op_str, rhs))
+            Ok(format!("{} {} {}", lhs, op_str, rhs))
         }
     }
 }
@@ -367,13 +482,12 @@ fn translate_filter(
 pub fn translate_filters(
     filters: &[Filter],
     alias_map: &HashMap<String, String>,
-    _cards: &SchemaCards,
+    cards: &SchemaCards,
 ) -> CompilerResult<Vec<PlanFilter>> {
-    // The `cards` parameter is included for future extensions (e.g. dynamic derived field discovery),
-    // but not used in this minimal example.
+    // Use cards to resolve field names to SQL expressions (JSONB paths or direct columns)
     filters
         .iter()
-        .map(|f| translate_filter(f, alias_map).map(|sql| PlanFilter { expression: sql }))
+        .map(|f| translate_filter(f, alias_map, cards).map(|sql| PlanFilter { expression: sql }))
         .collect()
 }
 
@@ -382,8 +496,8 @@ fn resolve_entity<'a>(field: &str, cards: &'a SchemaCards) -> Option<&'a str> {
     match field {
         // partner-level field
         "partnership_id" => return Some("partners"),
-        // campaign-level fields
-        "campaign_id" | "campaign_name" => return Some("campaigns_latest"),
+        // campaign-level fields (brand requires campaigns_latest)
+        "campaign_id" | "campaign_name" | "brand" => return Some("campaigns_latest"),
         // offer-level fields (direct columns)
         "offer_id" | "offer_name" | "workflow_status" | "countries" | "package_id" => {
             return Some("offers_latest")
@@ -408,7 +522,20 @@ fn resolve_entity<'a>(field: &str, cards: &'a SchemaCards) -> Option<&'a str> {
         }
     }
 
-    // 2b. Otherwise scan all entities to see if the field matches a direct column name.
+    // 2b. Check if field exists in any entity's json_paths (JSONB fields)
+    // Try both exact match and camelCase conversion (e.g., package_id → packageId)
+    let field_camel = to_camel_case(field);
+    for entity in &cards.entities {
+        for json_path in &entity.json_paths {
+            // Extract field name from $.fieldName
+            let path_field = json_path.path.trim_start_matches("$.");
+            if path_field == field || path_field == field_camel {
+                return Some(entity.name.as_str());
+            }
+        }
+    }
+
+    // 2c. Otherwise scan all entities to see if the field matches a direct column name.
     for entity in &cards.entities {
         if entity.columns.iter().any(|col| col.name == field) {
             return Some(entity.name.as_str());
@@ -554,11 +681,25 @@ fn compile_report_spec_internal(
         .map(|s| resolve_entity(&s.field, schema_cards))
         .collect::<Vec<_>>();
 
-    let required_entities = select_entities
+    let mut required_entities: Vec<_> = select_entities
         .iter()
         .chain(filter_entities.iter())
         .chain(order_by_entities.iter())
-        .collect::<Vec<_>>();
+        .collect();
+
+    // Add bridge tables when needed for joins
+    // If we have both offers_latest and campaigns_latest, add campaign_offers
+    let has_offers = required_entities
+        .iter()
+        .any(|e| e.as_ref() == Some(&"offers_latest"));
+    let has_campaigns = required_entities
+        .iter()
+        .any(|e| e.as_ref() == Some(&"campaigns_latest"));
+
+    if has_offers && has_campaigns {
+        required_entities.push(&Some("campaign_offers"));
+    }
+
     let tables = required_entities
         .iter()
         .filter_map(|e| {
@@ -584,7 +725,7 @@ fn compile_report_spec_internal(
         .map(|t| (t.name.clone(), t.alias.clone()))
         .collect();
     let joins = build_joins(&reg.cards, required_entities, &alias_map)?;
-    let projections = translate_projections(&spec.select, &alias_map, &reg.cards)?;
+    let projections = translate_projections(&spec.select, &alias_map, &reg.cards, spec)?;
     let filters = translate_filters(&spec.filters, &alias_map, &reg.cards)?;
     let order_by = translate_ordering(&spec.order_by, &alias_map, &reg.cards)?;
     let (limit, offset) = compile_pagination(spec)?;

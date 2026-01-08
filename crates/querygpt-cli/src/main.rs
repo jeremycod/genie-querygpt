@@ -54,6 +54,15 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
+/// Extract retry_after seconds from error message
+fn extract_retry_after(error_str: &str) -> Option<u64> {
+    error_str
+        .split("try again in ")
+        .nth(1)
+        .and_then(|s| s.split('s').next())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+}
+
 /// Build a FixturePlanner with common test cases
 fn build_fixture_planner() -> FixturePlanner {
     use querygpt_core::dsl::report_spec::{
@@ -126,7 +135,7 @@ fn build_fixture_planner() -> FixturePlanner {
                 },
             ],
             filters: vec![Filter {
-                field: "campaign_deleted".to_string(),
+                field: "deleted".to_string(),
                 op: FilterOp::Eq,
                 value: json!(false),
             }],
@@ -179,7 +188,7 @@ fn build_fixture_planner() -> FixturePlanner {
                 },
             ],
             filters: vec![Filter {
-                field: "offer_deleted".to_string(),
+                field: "deleted".to_string(),
                 op: FilterOp::Eq,
                 value: json!(false),
             }],
@@ -190,6 +199,338 @@ fn build_fixture_planner() -> FixturePlanner {
     );
 
     planner
+}
+
+/// Build example queries to guide the LLM
+fn build_example_queries() -> Vec<querygpt_core::planner::schema_summary::ExamplePair> {
+    use querygpt_core::dsl::report_spec::{
+        Filter, FilterOp, Mode, OrderBy, ReportSpec, SelectItem, SortDir,
+    };
+    use querygpt_core::planner::schema_summary::ExamplePair;
+    use serde_json::json;
+
+    vec![
+        // Example 1: Simple select with two fields
+        ExamplePair {
+            prompt: "show all offers".to_string(),
+            description: "Select basic fields from offers_latest".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 2: With filter on boolean field
+        ExamplePair {
+            prompt: "show active offers".to_string(),
+            description: "Filter offers where deleted is false".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "status".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![Filter {
+                    field: "deleted".to_string(),
+                    op: FilterOp::Eq,
+                    value: json!(false),
+                }],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 3: With ORDER BY
+        ExamplePair {
+            prompt: "list campaigns ordered by name".to_string(),
+            description: "Order results by name ascending".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![],
+                order_by: vec![OrderBy {
+                    field: "name".to_string(),
+                    dir: SortDir::Asc,
+                }],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 4: Date comparison filter
+        ExamplePair {
+            prompt: "show offers starting after January 1 2024".to_string(),
+            description: "Filter by date using gte operator".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "start_date".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![Filter {
+                    field: "start_date".to_string(),
+                    op: FilterOp::Gte,
+                    value: json!("2024-01-01"),
+                }],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 5: Array filtering with overlaps operator
+        ExamplePair {
+            prompt: "show offers available in US".to_string(),
+            description: "Filter array field using overlaps operator for geographic queries"
+                .to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "countries".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![Filter {
+                    field: "countries".to_string(),
+                    op: FilterOp::Overlaps,
+                    value: json!(["US"]),
+                }],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 6: Multiple filters combined
+        ExamplePair {
+            prompt: "show active offers starting in 2024".to_string(),
+            description: "Combine multiple filters - boolean and date".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "status".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "start_date".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![
+                    Filter {
+                        field: "deleted".to_string(),
+                        op: FilterOp::Eq,
+                        value: json!(false),
+                    },
+                    Filter {
+                        field: "start_date".to_string(),
+                        op: FilterOp::Gte,
+                        value: json!("2024-01-01"),
+                    },
+                ],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 7: ORDER BY with field properly included in SELECT
+        ExamplePair {
+            prompt: "list offers ordered by start date".to_string(),
+            description: "Order by date field - note start_date is in SELECT".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "start_date".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![],
+                order_by: vec![OrderBy {
+                    field: "start_date".to_string(),
+                    dir: SortDir::Asc,
+                }],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 8: Region query with country code expansion
+        ExamplePair {
+            prompt: "show offers in APAC countries".to_string(),
+            description: "Region names must be expanded to country codes - APAC becomes full Asia-Pacific country list".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "countries".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "status".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![Filter {
+                    field: "countries".to_string(),
+                    op: FilterOp::Overlaps,
+                    value: json!(["AF","AU","BD","BT","BN","KH","CN","HK","IN","ID","JP","KI","KP","KR","LA","MY","MV","MN","MM","NP","NZ","PK","PG","PH","SG","SB","LK","TW","TH","TL","VU","VN"]),
+                }],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 9: Filter with IN operator
+        ExamplePair {
+            prompt: "show offers with status active or pending".to_string(),
+            description: "Use IN operator for multiple value matching".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "status".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![Filter {
+                    field: "status".to_string(),
+                    op: FilterOp::In,
+                    value: json!(["active", "pending"]),
+                }],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 10: NULL check with eq operator
+        ExamplePair {
+            prompt: "show offers that have not expired yet".to_string(),
+            description:
+                "NULL checks use 'eq' operator with null value - NEVER use 'isnull' operator"
+                    .to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "endDate".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "status".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![
+                    Filter {
+                        field: "endDate".to_string(),
+                        op: FilterOp::Eq,
+                        value: json!(null),
+                    },
+                ],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+    ]
 }
 
 async fn handle_plan_command(
@@ -217,12 +558,26 @@ async fn handle_plan_command(
     let registry = SchemaRegistry::load(index_path.to_str().unwrap())
         .map_err(|e| anyhow::anyhow!("Failed to load schema registry: {}", e))?;
 
-    // Step 2: Build planner context
-    let context = PlannerContext::simple(
-        "campaigns_offers".to_string(),
-        vec!["campaign_id".to_string(), "campaign_name".to_string()],
-        vec!["campaigns_latest".to_string()],
-    );
+    // Step 2: Build planner context with full schema
+    let schema_summary =
+        querygpt_core::planner::schema_summary::SchemaSummary::from_registry(&registry);
+
+    // Extract field and table names for backward compatibility
+    let available_fields = schema_summary.get_all_fields();
+    let available_tables = schema_summary.get_all_tables();
+
+    // Add example queries to guide the LLM
+    let examples = build_example_queries();
+
+    let context = PlannerContext {
+        workspace: "campaigns_offers".to_string(),
+        schema_summary,
+        report_spec_schema: None, // Not needed for LLM planner
+        examples,
+        constraints: querygpt_core::planner::schema_summary::PlannerConstraints::default(),
+        available_fields,
+        available_tables,
+    };
 
     // Step 3: Run orchestration based on planner type and confirmation mode
     let result = if openai {
@@ -287,12 +642,39 @@ async fn handle_plan_command(
         }
         querygpt_core::planner::orchestration::OrchestrationResult::PlannerFailed { error } => {
             println!("\n❌ Planner failed: {}", error);
-            println!("\n💡 Available test prompts:");
-            println!("   • show all campaigns");
-            println!("   • show all offers");
-            println!("   • show active campaigns");
-            println!("   • show active offers");
-            println!("   • show campaigns ordered by name");
+
+            // Provide context-specific help based on error type
+            let error_str = error.to_string();
+            if error_str.contains("timeout") {
+                println!("\n💡 Troubleshooting timeout:");
+                println!("   • Check your internet connection");
+                println!("   • OpenAI API might be experiencing high load");
+                println!("   • Try again in a few moments");
+            } else if error_str.contains("rate limit") {
+                println!("\n💡 Rate limit exceeded:");
+                println!("   • Wait a few minutes before trying again");
+                println!("   • Consider upgrading your OpenAI API plan");
+                if let Some(retry_after) = extract_retry_after(&error_str) {
+                    println!("   • Retry after {} seconds", retry_after);
+                }
+            } else if error_str.contains("authentication") || error_str.contains("API key") {
+                println!("\n💡 Authentication failed:");
+                println!("   • Check that OPENAI_API_KEY is set correctly");
+                println!("   • Verify your API key at https://platform.openai.com/api-keys");
+                println!("   • Ensure your API key has not expired");
+            } else if error_str.contains("network") || error_str.contains("connect") {
+                println!("\n💡 Network error:");
+                println!("   • Check your internet connection");
+                println!("   • Verify you can reach api.openai.com");
+                println!("   • Check if a firewall is blocking the request");
+            } else {
+                println!("\n💡 Available test prompts:");
+                println!("   • show all campaigns");
+                println!("   • show all offers");
+                println!("   • show active campaigns");
+                println!("   • show active offers");
+                println!("   • show campaigns ordered by name");
+            }
             Err(anyhow::anyhow!("Planner failed: {}", error))
         }
         querygpt_core::planner::orchestration::OrchestrationResult::UserRejected { .. } => {

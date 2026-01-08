@@ -1,4 +1,5 @@
 use crate::dsl::report_spec::ReportSpec;
+use crate::schema::registry::SchemaRegistry;
 use serde::{Deserialize, Serialize};
 
 /// Enhanced schema summary for LLM context
@@ -115,5 +116,116 @@ impl SchemaSummary {
     /// Get all available table names
     pub fn get_all_tables(&self) -> Vec<String> {
         self.tables.iter().map(|table| table.name.clone()).collect()
+    }
+
+    /// Build a SchemaSummary from a SchemaRegistry
+    pub fn from_registry(registry: &SchemaRegistry) -> Self {
+        // Convert entities to table summaries
+        let tables = registry
+            .cards
+            .entities
+            .iter()
+            .map(|entity| {
+                // Generate table alias (first letter of each word)
+                let alias = Self::generate_alias(&entity.name);
+
+                // Convert columns to field summaries
+                // Skip promoted columns that have JSONB equivalents (we'll expose JSONB version instead)
+                let skip_promoted_columns = ["start_date", "end_date", "status", "countries"];
+                let mut fields: Vec<FieldSummary> = entity
+                    .columns
+                    .iter()
+                    .filter(|col| !skip_promoted_columns.contains(&col.name.as_str()))
+                    .map(|col| FieldSummary {
+                        name: col.name.clone(),
+                        field_type: col.data_type.clone(),
+                        nullable: col.nullable,
+                        description: Some(col.description.clone()),
+                        enum_values: None, // Could be enhanced later
+                    })
+                    .collect();
+
+                // Add JSONB paths as queryable fields (use camelCase field names)
+                for json_path in &entity.json_paths {
+                    // Extract field name from $.fieldName
+                    let field_name = json_path.path.trim_start_matches("$.");
+                    fields.push(FieldSummary {
+                        name: field_name.to_string(),
+                        field_type: json_path.data_type.clone(),
+                        nullable: true, // JSONB fields are always nullable
+                        description: Some(json_path.description.clone()),
+                        enum_values: None,
+                    });
+                }
+
+                TableSummary {
+                    name: entity.name.clone(),
+                    alias,
+                    fields,
+                    description: Some(entity.description.clone()),
+                }
+            })
+            .collect();
+
+        // Convert join graph to relationships (simplified for now)
+        let relationships = registry
+            .cards
+            .join_graph
+            .edges
+            .iter()
+            .map(|edge| {
+                // Parse the first ON condition to extract field names
+                // Format is like "table1.field1 = table2.field2"
+                let (from_field, to_field) = edge
+                    .on
+                    .first()
+                    .and_then(|on_clause| {
+                        let parts: Vec<&str> = on_clause.split('=').collect();
+                        if parts.len() == 2 {
+                            let from = parts[0].trim().split('.').nth(1)?.trim();
+                            let to = parts[1].trim().split('.').nth(1)?.trim();
+                            Some((from.to_string(), to.to_string()))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| ("id".to_string(), "id".to_string()));
+
+                let relationship_type = match edge.cardinality.as_str() {
+                    "1:1" => RelationshipType::OneToOne,
+                    "1:n" => RelationshipType::OneToMany,
+                    "n:1" => RelationshipType::ManyToOne,
+                    "n:n" => RelationshipType::ManyToMany,
+                    _ => RelationshipType::OneToMany,
+                };
+
+                JoinRelationship {
+                    from_table: edge.from.clone(),
+                    from_field,
+                    to_table: edge.to.clone(),
+                    to_field,
+                    relationship_type,
+                }
+            })
+            .collect();
+
+        Self {
+            tables,
+            relationships,
+            enums: vec![], // Could be extracted from schema metadata later
+        }
+    }
+
+    /// Generate a short alias for a table name
+    /// Examples: "offers_latest" -> "o", "campaigns_latest" -> "c"
+    fn generate_alias(table_name: &str) -> String {
+        // Take first letter of first significant word (skip "latest", "active", etc.)
+        let parts: Vec<&str> = table_name.split('_').collect();
+        let significant_part = parts
+            .iter()
+            .find(|&part| *part != "latest" && *part != "active")
+            .unwrap_or(&parts[0]);
+
+        significant_part.chars().next().unwrap_or('t').to_string()
     }
 }
