@@ -164,7 +164,7 @@ expression: plan
     {
       "field": "countries",
       "expression": "o.attributes ->> 'countries'",
-      "alias": null
+      "alias": "countries"
     },
     {
       "field": "products_csv",
@@ -174,7 +174,7 @@ expression: plan
     {
       "field": "package_id",
       "expression": "o.attributes ->> 'packageId'",
-      "alias": null
+      "alias": "package_id"
     }
   ],
   "filters": [

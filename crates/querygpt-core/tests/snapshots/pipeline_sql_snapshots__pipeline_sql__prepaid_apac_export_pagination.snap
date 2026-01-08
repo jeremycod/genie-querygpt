@@ -9,9 +9,9 @@ SELECT p.id,
        o.name,
        CASE WHEN o.end_date::date < CURRENT_DATE THEN 'EXPIRED' ELSE o.status END,
        o.status,
-       o.attributes ->> 'countries',
+       o.attributes ->> 'countries' AS countries,
        STRING_AGG(DISTINCT opr.product_id, ','),
-       o.attributes ->> 'packageId'
+       o.attributes ->> 'packageId' AS package_id
 FROM campaigns_latest c
 
 LEFT JOIN partners p ON c.partner_id = p.id AND c.profile = p.profile

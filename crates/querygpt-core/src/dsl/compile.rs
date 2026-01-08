@@ -233,10 +233,17 @@ pub fn translate_projections(
                     })?
                 };
 
+            // Auto-generate alias for JSON extractions to prevent ?column? in PostgreSQL
+            let alias = if item.alias.is_none() && (expr.contains("->") || expr.contains("->>")) {
+                Some(item.field.clone())
+            } else {
+                item.alias.clone()
+            };
+
             Ok(PlanProjection {
                 field: item.field.clone(),
                 expression: expr,
-                alias: item.alias.clone(),
+                alias,
             })
         })
         .collect()
