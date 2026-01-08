@@ -130,9 +130,12 @@ impl SchemaSummary {
                 let alias = Self::generate_alias(&entity.name);
 
                 // Convert columns to field summaries
-                let fields = entity
+                // Skip promoted columns that have JSONB equivalents (we'll expose JSONB version instead)
+                let skip_promoted_columns = ["start_date", "end_date", "status", "countries"];
+                let mut fields: Vec<FieldSummary> = entity
                     .columns
                     .iter()
+                    .filter(|col| !skip_promoted_columns.contains(&col.name.as_str()))
                     .map(|col| FieldSummary {
                         name: col.name.clone(),
                         field_type: col.data_type.clone(),
@@ -141,6 +144,19 @@ impl SchemaSummary {
                         enum_values: None, // Could be enhanced later
                     })
                     .collect();
+
+                // Add JSONB paths as queryable fields (use camelCase field names)
+                for json_path in &entity.json_paths {
+                    // Extract field name from $.fieldName
+                    let field_name = json_path.path.trim_start_matches("$.");
+                    fields.push(FieldSummary {
+                        name: field_name.to_string(),
+                        field_type: json_path.data_type.clone(),
+                        nullable: true, // JSONB fields are always nullable
+                        description: Some(json_path.description.clone()),
+                        enum_values: None,
+                    });
+                }
 
                 TableSummary {
                     name: entity.name.clone(),

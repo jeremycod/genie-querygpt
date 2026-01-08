@@ -67,7 +67,16 @@ FILTER OPERATORS (lowercase):
 - "in": In list (value must be array)
 - "overlaps": Overlaps with (for array fields)
 - "gte": Greater than or equal
-- "lte": Less than or equal"#,
+- "lte": Less than or equal
+
+REGION TO COUNTRY MAPPING:
+When users mention regions, expand them to ISO 3166-1 alpha-2 country codes:
+- APAC (Asia-Pacific): ["AF","AU","BD","BT","BN","KH","CN","HK","IN","ID","JP","KI","KP","KR","LA","MY","MV","MN","MM","NP","NZ","PK","PG","PH","SG","SB","LK","TW","TH","TL","VU","VN"]
+- EMEA (Europe/Middle East/Africa): ["AL","DZ","AD","AO","AM","AT","AZ","BH","BY","BE","BA","BW","BG","BI","CM","CV","CF","TD","KM","CG","HR","CY","CZ","DK","DJ","EG","GQ","ER","EE","ET","FI","FR","GA","GM","GE","DE","GH","GR","GN","GW","HU","IS","IR","IQ","IE","IL","IT","CI","JO","KZ","KE","KW","KG","LV","LB","LS","LR","LY","LI","LT","LU","MK","MG","MW","ML","MT","MR","MU","MD","MC","ME","MA","MZ","NA","NL","NE","NG","NO","OM","PS","PL","PT","QA","RO","RU","RW","ST","SA","SN","RS","SC","SL","SK","SI","SO","ZA","SS","ES","SD","SZ","SE","CH","SY","TJ","TZ","TG","TN","TR","TM","UG","UA","AE","GB","UZ","VA","YE","ZM","ZW"]
+- LATAM (Latin America): ["AR","BZ","BO","BR","CL","CO","CR","CU","DO","EC","SV","GT","HT","HN","MX","NI","PA","PY","PE","UY","VE"]
+- NA (North America): ["US","CA"]
+
+IMPORTANT: Always use country codes, never use region names as literal values!"#,
             constraints_info, ctx.workspace, schema_info, examples_info, ctx.workspace
         )
     }

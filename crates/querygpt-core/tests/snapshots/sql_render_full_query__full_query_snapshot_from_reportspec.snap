@@ -9,7 +9,7 @@ SELECT p.id,
        o.name,
        CASE WHEN o.end_date::date < CURRENT_DATE THEN 'EXPIRED' ELSE o.status END,
        o.status,
-       o.countries,
+       o.attributes ->> 'countries',
        STRING_AGG(DISTINCT opr.product_id, ','),
        o.attributes ->> 'packageId'
 FROM campaigns_latest c
@@ -18,7 +18,7 @@ LEFT JOIN partners p ON c.partner_id = p.id AND c.profile = p.profile
 JOIN offer_phases oph ON o.id = oph.offer_id AND o.profile = oph.profile AND o.version = oph.version
 JOIN offer_products opr ON o.id = opr.offer_id AND o.profile = opr.profile AND o.version = opr.version
 WHERE promo_type = 'PREPAID'
-  AND o.countries && ARRAY['KR', 'JP', 'TW', 'SG', 'HK']
+  AND (o.attributes -> 'countries' ?| ARRAY['KR', 'JP', 'TW', 'SG', 'HK'])
   AND o.status IN ('PUBLISHED', 'EXPIRED')
 GROUP BY p.id,
          c.id,
@@ -27,7 +27,7 @@ GROUP BY p.id,
          o.name,
          CASE WHEN o.end_date::date < CURRENT_DATE THEN 'EXPIRED' ELSE o.status END,
          o.status,
-         o.countries,
+         o.attributes ->> 'countries',
          o.attributes ->> 'packageId'
 ORDER BY p.id ASC,
          c.id ASC,

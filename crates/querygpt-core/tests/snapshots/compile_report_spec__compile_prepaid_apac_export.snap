@@ -163,7 +163,7 @@ expression: plan
     },
     {
       "field": "countries",
-      "expression": "o.countries",
+      "expression": "o.attributes ->> 'countries'",
       "alias": null
     },
     {
@@ -182,7 +182,7 @@ expression: plan
       "expression": "promo_type = 'PREPAID'"
     },
     {
-      "expression": "o.countries && ARRAY['KR', 'JP', 'TW', 'SG', 'HK']"
+      "expression": "(o.attributes -> 'countries' ?| ARRAY['KR', 'JP', 'TW', 'SG', 'HK'])"
     },
     {
       "expression": "o.status IN ('PUBLISHED', 'EXPIRED')"

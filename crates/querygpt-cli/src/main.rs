@@ -321,6 +321,223 @@ fn build_example_queries() -> Vec<querygpt_core::planner::schema_summary::Exampl
                 pagination: None,
             },
         },
+        // Example 5: Array filtering with overlaps operator
+        ExamplePair {
+            prompt: "show offers available in US".to_string(),
+            description: "Filter array field using overlaps operator for geographic queries"
+                .to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "countries".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![Filter {
+                    field: "countries".to_string(),
+                    op: FilterOp::Overlaps,
+                    value: json!(["US"]),
+                }],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 6: Multiple filters combined
+        ExamplePair {
+            prompt: "show active offers starting in 2024".to_string(),
+            description: "Combine multiple filters - boolean and date".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "status".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "start_date".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![
+                    Filter {
+                        field: "deleted".to_string(),
+                        op: FilterOp::Eq,
+                        value: json!(false),
+                    },
+                    Filter {
+                        field: "start_date".to_string(),
+                        op: FilterOp::Gte,
+                        value: json!("2024-01-01"),
+                    },
+                ],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 7: ORDER BY with field properly included in SELECT
+        ExamplePair {
+            prompt: "list offers ordered by start date".to_string(),
+            description: "Order by date field - note start_date is in SELECT".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "start_date".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![],
+                order_by: vec![OrderBy {
+                    field: "start_date".to_string(),
+                    dir: SortDir::Asc,
+                }],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 8: Region query with country code expansion
+        ExamplePair {
+            prompt: "show offers in APAC countries".to_string(),
+            description: "Region names must be expanded to country codes - APAC becomes full Asia-Pacific country list".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "countries".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "status".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![Filter {
+                    field: "countries".to_string(),
+                    op: FilterOp::Overlaps,
+                    value: json!(["AF","AU","BD","BT","BN","KH","CN","HK","IN","ID","JP","KI","KP","KR","LA","MY","MV","MN","MM","NP","NZ","PK","PG","PH","SG","SB","LK","TW","TH","TL","VU","VN"]),
+                }],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 9: Filter with IN operator
+        ExamplePair {
+            prompt: "show offers with status active or pending".to_string(),
+            description: "Use IN operator for multiple value matching".to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "status".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![Filter {
+                    field: "status".to_string(),
+                    op: FilterOp::In,
+                    value: json!(["active", "pending"]),
+                }],
+                order_by: vec![],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
+        // Example 10: Combined filters with ORDER BY (comprehensive)
+        ExamplePair {
+            prompt: "show active offers in Europe ordered by name".to_string(),
+            description:
+                "Combine filters (boolean, array) with ordering - all referenced fields in SELECT"
+                    .to_string(),
+            spec: ReportSpec {
+                version: 1,
+                workspace: "campaigns_offers".to_string(),
+                select: vec![
+                    SelectItem {
+                        field: "id".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "name".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "countries".to_string(),
+                        alias: None,
+                    },
+                    SelectItem {
+                        field: "status".to_string(),
+                        alias: None,
+                    },
+                ],
+                filters: vec![
+                    Filter {
+                        field: "deleted".to_string(),
+                        op: FilterOp::Eq,
+                        value: json!(false),
+                    },
+                    Filter {
+                        field: "countries".to_string(),
+                        op: FilterOp::Overlaps,
+                        value: json!(["DE", "FR", "GB"]),
+                    },
+                ],
+                order_by: vec![OrderBy {
+                    field: "name".to_string(),
+                    dir: SortDir::Asc,
+                }],
+                mode: Mode::Preview,
+                pagination: None,
+            },
+        },
     ]
 }
 
