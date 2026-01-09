@@ -1,8 +1,9 @@
 use crate::dsl::report_spec::ReportSpec;
+use serde::Serialize;
 use serde_json;
 
 /// Represents a change between two ReportSpec versions
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SpecDiff {
     pub field_path: String,
     pub change_type: ChangeType,
@@ -10,7 +11,7 @@ pub struct SpecDiff {
     pub new_value: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ChangeType {
     Added,
     Removed,
