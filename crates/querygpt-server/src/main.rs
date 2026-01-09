@@ -1,5 +1,7 @@
 mod api_types;
 mod confirmation;
+mod db;
+mod executor;
 mod session;
 
 use api_types::{ConfirmRequest, ErrorResponse, QueryRequest, QueryResponse};
@@ -11,6 +13,8 @@ use axum::{
     Json, Router,
 };
 use confirmation::ServerConfirmation;
+use db::DbPool;
+use executor::{ExecutionMode, SqlExecutor};
 use querygpt_core::agents::intent;
 use querygpt_core::planner::llm_planner::LlmPlanner;
 use querygpt_core::planner::openai_client::OpenAIClient;
@@ -77,6 +81,8 @@ async fn query(
                 rationale: draft.as_ref().and_then(|d| d.rationale.clone()),
                 assumptions: draft.map(|d| d.assumptions).unwrap_or_default(),
                 trace,
+                preview_data: None, // TODO: Add preview execution
+                pipeline: None,     // TODO: Add pipeline capture
             }))
         }
         OrchestrationResult::CompilationFailed { diagnostics, draft } => {

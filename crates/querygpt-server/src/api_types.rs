@@ -22,10 +22,20 @@ pub struct QueryRequest {
     pub max_attempts: usize,
     /// Optional session ID for continuing a previous session
     pub session_id: Option<String>,
+    /// Whether to execute and return preview data
+    #[serde(default)]
+    pub execute_preview: bool,
+    /// Number of rows to include in preview (default: 10, max: 1000)
+    #[serde(default = "default_preview_limit")]
+    pub preview_limit: usize,
 }
 
 fn default_max_attempts() -> usize {
     3
+}
+
+fn default_preview_limit() -> usize {
+    10
 }
 
 /// Confirmation request - user's response to pending changes
@@ -64,6 +74,10 @@ pub enum QueryResponse {
         assumptions: Vec<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         trace: Option<PlannerTrace>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        preview_data: Option<PreviewData>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pipeline: Option<Pipeline>,
     },
     /// Pending user confirmation for proposed changes
     PendingConfirmation {
@@ -183,4 +197,68 @@ impl ErrorResponse {
             details: Some(details.into()),
         }
     }
+}
+
+// ============================================================================
+// Preview Data and Pipeline Types
+// ============================================================================
+
+/// Query execution preview data (for Preview Tab)
+///
+/// Re-exported from executor module for convenience
+pub use crate::executor::{ColumnInfo, QueryResult as PreviewData};
+
+/// Pipeline visualization data (for Code Tab)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Pipeline {
+    pub stages: Vec<PipelineStage>,
+}
+
+/// A single stage in the query processing pipeline
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineStage {
+    pub name: String,
+    pub status: StageStatus,
+    pub timestamp: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    pub output: serde_json::Value,
+}
+
+/// Status of a pipeline stage
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum StageStatus {
+    Success,
+    Failed,
+    Skipped,
+}
+
+// ============================================================================
+// New Endpoint Request Types
+// ============================================================================
+
+/// Request to execute SQL directly (POST /execute)
+#[derive(Debug, Deserialize)]
+pub struct ExecuteRequest {
+    pub sql: String,
+    pub mode: crate::executor::ExecutionMode,
+    #[serde(default = "default_preview_limit")]
+    pub limit: usize,
+}
+
+/// Request to export query results (POST /export)
+#[derive(Debug, Deserialize)]
+pub struct ExportRequest {
+    pub sql: String,
+    pub format: ExportFormat,
+    pub session_id: Option<String>,
+}
+
+/// Export format options
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    Csv,
+    Json,
 }
