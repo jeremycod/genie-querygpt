@@ -2,12 +2,16 @@ mod api_types;
 mod confirmation;
 mod db;
 mod executor;
+mod export;
 mod session;
 
-use api_types::{ConfirmRequest, ErrorResponse, QueryRequest, QueryResponse};
+use api_types::{
+    ConfirmRequest, ErrorResponse, ExecuteRequest, ExportFormat, ExportRequest, QueryRequest,
+    QueryResponse,
+};
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{header, Method, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
@@ -25,13 +29,16 @@ use querygpt_core::schema::registry::SchemaRegistry;
 use querygpt_core::sql::render::render_sql;
 use session::SessionStore;
 use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
 
 /// Shared application state
 #[derive(Clone)]
 struct AppState {
     session_store: SessionStore,
-    // In production, this could be a pool of registries
+    /// Schema registry loaded from configuration
     registry: Arc<SchemaRegistry>,
+    /// Database connection pool (optional - only if DATABASE_URL is configured)
+    db_pool: Option<DbPool>,
 }
 
 /// Main query endpoint - initiates SQL generation from natural language
@@ -75,14 +82,45 @@ async fn query(
             let sql = render_sql(&plan)
                 .map_err(|e| AppError::RenderError(format!("Failed to render SQL: {}", e)))?;
 
+            // Step 7: Execute preview if requested and database is configured
+            let preview_data = if req.execute_preview {
+                if let Some(ref db_pool) = state.db_pool {
+                    let executor = SqlExecutor::new(db_pool.clone());
+                    let mode = ExecutionMode::Preview {
+                        limit: req.preview_limit,
+                    };
+
+                    match executor.execute(&sql, mode).await {
+                        Ok(result) => {
+                            tracing::info!(
+                                "Preview executed successfully: {} rows in {}ms",
+                                result.total_rows,
+                                result.execution_time_ms
+                            );
+                            Some(result)
+                        }
+                        Err(e) => {
+                            tracing::warn!("Preview execution failed: {}", e);
+                            // Don't fail the request, just log the error
+                            None
+                        }
+                    }
+                } else {
+                    tracing::warn!("Preview execution requested but database not configured");
+                    None
+                }
+            } else {
+                None
+            };
+
             Ok(Json(QueryResponse::Success {
                 sql,
                 plan,
                 rationale: draft.as_ref().and_then(|d| d.rationale.clone()),
                 assumptions: draft.map(|d| d.assumptions).unwrap_or_default(),
                 trace,
-                preview_data: None, // TODO: Add preview execution
-                pipeline: None,     // TODO: Add pipeline capture
+                preview_data,
+                pipeline: None, // TODO: Add pipeline capture in future PR
             }))
         }
         OrchestrationResult::CompilationFailed { diagnostics, draft } => {
@@ -123,6 +161,91 @@ async fn confirm(
     Err(AppError::NotImplemented(
         "Confirmation flow not yet implemented".to_string(),
     ))
+}
+
+/// Execute SQL directly and return results
+///
+/// This endpoint executes SQL without going through the query generation pipeline.
+/// Useful for:
+/// - Refreshing preview data
+/// - Re-executing queries with different limits
+/// - Testing SQL directly
+async fn execute(
+    State(state): State<AppState>,
+    Json(req): Json<ExecuteRequest>,
+) -> Result<Json<executor::QueryResult>, AppError> {
+    // Check if database is configured
+    let db_pool = state.db_pool.as_ref().ok_or_else(|| {
+        AppError::NotImplemented(
+            "Database not configured. Set DATABASE_URL environment variable.".to_string(),
+        )
+    })?;
+
+    // Create executor
+    let executor = SqlExecutor::new(db_pool.clone());
+
+    // Determine execution mode from request
+    let mode = match req.mode {
+        ExecutionMode::Preview { .. } => ExecutionMode::Preview { limit: req.limit },
+        ExecutionMode::Export => ExecutionMode::Export,
+    };
+
+    // Execute SQL
+    let result = executor.execute(&req.sql, mode).await.map_err(|e| {
+        tracing::error!("SQL execution failed: {}", e);
+        AppError::ExecutionFailed(format!("Query execution failed: {}", e))
+    })?;
+
+    tracing::info!(
+        "SQL executed successfully: {} rows in {}ms",
+        result.total_rows,
+        result.execution_time_ms
+    );
+
+    Ok(Json(result))
+}
+
+/// Export query results to CSV or JSON format
+///
+/// This endpoint executes SQL and returns results as a downloadable file.
+/// Supports both CSV and JSON formats with appropriate headers for downloads.
+/// Useful for exporting large datasets or generating reports.
+async fn export(
+    State(state): State<AppState>,
+    Json(req): Json<ExportRequest>,
+) -> Result<Response, AppError> {
+    // Check if database is configured
+    let db_pool = state.db_pool.as_ref().ok_or_else(|| {
+        AppError::NotImplemented(
+            "Database not configured. Set DATABASE_URL environment variable.".to_string(),
+        )
+    })?;
+
+    // Execute export based on format
+    let response = match req.format {
+        ExportFormat::Csv => {
+            let exporter = export::CsvExporter::new(db_pool.clone());
+            exporter
+                .export(&req.sql)
+                .await
+                .map_err(|e| AppError::ExecutionFailed(format!("CSV export failed: {}", e)))?
+        }
+        ExportFormat::Json => {
+            let exporter = export::JsonExporter::new(db_pool.clone());
+            exporter
+                .export(&req.sql)
+                .await
+                .map_err(|e| AppError::ExecutionFailed(format!("JSON export failed: {}", e)))?
+        }
+    };
+
+    tracing::info!(
+        "Export completed successfully: format={:?}, session_id={:?}",
+        req.format,
+        req.session_id
+    );
+
+    Ok(response)
 }
 
 /// Build fixture planner with test cases
@@ -251,6 +374,7 @@ enum AppError {
     RenderError(String),
     UnexpectedState(String),
     NotImplemented(String),
+    ExecutionFailed(String),
 }
 
 impl IntoResponse for AppError {
@@ -260,6 +384,7 @@ impl IntoResponse for AppError {
             AppError::RenderError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::UnexpectedState(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::NotImplemented(msg) => (StatusCode::NOT_IMPLEMENTED, msg),
+            AppError::ExecutionFailed(msg) => (StatusCode::BAD_REQUEST, msg),
         };
 
         let error = ErrorResponse::new(message);
@@ -281,15 +406,46 @@ async fn main() {
             .expect("Failed to load schema registry"),
     );
 
+    // Initialize database pool (optional - only if DATABASE_URL is configured)
+    let db_pool = match DbPool::from_env() {
+        Ok(pool) => {
+            tracing::info!("Database connection pool initialized successfully");
+            Some(pool)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Database not configured: {}. Preview execution will be unavailable.",
+                e
+            );
+            None
+        }
+    };
+
     let state = AppState {
         session_store,
         registry,
+        db_pool: db_pool.clone(),
     };
+
+    // Configure CORS for frontend integration
+    let cors = CorsLayer::new()
+        // Allow requests from Vite dev server
+        .allow_origin(
+            "http://localhost:5173"
+                .parse::<axum::http::HeaderValue>()
+                .unwrap(),
+        )
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        .allow_credentials(true);
 
     // Build router
     let app = Router::new()
         .route("/query", post(query))
+        .route("/execute", post(execute))
+        .route("/export", post(export))
         .route("/confirm", post(confirm))
+        .layer(cors)
         .with_state(state);
 
     // Start server
@@ -302,8 +458,25 @@ async fn main() {
         .expect("Failed to bind server");
 
     println!("Server running on {}", bind_addr);
+    println!(
+        "Database: {}",
+        if db_pool.is_some() {
+            "Connected ✓"
+        } else {
+            "Not configured (preview execution disabled)"
+        }
+    );
+    println!(
+        "CORS: Enabled for {}",
+        std::env::var("CORS_ALLOWED_ORIGINS")
+            .unwrap_or_else(|_| "http://localhost:5173".to_string())
+    );
+    println!();
     println!("Endpoints:");
     println!("  POST /query    - Submit natural language query");
+    println!("                   Supports 'execute_preview' for instant results");
+    println!("  POST /execute  - Execute SQL directly (preview or export mode)");
+    println!("  POST /export   - Download query results as CSV or JSON");
     println!("  POST /confirm  - Respond to confirmation request (TODO)");
 
     axum::serve(listener, app)
