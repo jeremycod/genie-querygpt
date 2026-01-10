@@ -63,6 +63,25 @@ fn to_camel_case(s: &str) -> String {
     result
 }
 
+/// Convert camelCase to snake_case for SQL column aliases
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::new();
+
+    for (i, ch) in s.chars().enumerate() {
+        if ch.is_ascii_uppercase() {
+            // Add underscore before uppercase letter, except at the start
+            if i > 0 {
+                result.push('_');
+            }
+            result.push(ch.to_ascii_lowercase());
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
 fn normalize_join_condition_for_aliases(
     left_alias: &str,
     right_alias: &str,
@@ -104,6 +123,12 @@ fn field_to_sql_expr(
         "campaign_name" => alias_map
             .get("campaigns_latest")
             .map(|a| format!("{}.name", a)),
+        "campaign_startDate" => alias_map
+            .get("campaigns_latest")
+            .map(|a| format!("{}.attributes -> 'startDate'", a)),
+        "campaign_endDate" => alias_map
+            .get("campaigns_latest")
+            .map(|a| format!("{}.attributes -> 'endDate'", a)),
         "offer_id" => alias_map.get("offers_latest").map(|a| format!("{}.id", a)),
         "offer_name" => alias_map
             .get("offers_latest")
@@ -255,9 +280,33 @@ pub fn translate_projections(
                 expr
             };
 
-            // Auto-generate alias for JSON extractions to prevent ?column? in PostgreSQL
-            let alias = if item.alias.is_none() && (expr.contains("->") || expr.contains("->>")) {
-                Some(item.field.clone())
+            // Auto-generate meaningful aliases for better column names
+            let alias = if item.alias.is_none() {
+                // Generate human-readable aliases based on field names (using snake_case)
+                match item.field.as_str() {
+                    // Campaign fields already have campaign_ prefix, keep as-is
+                    "campaign_id" | "campaign_name" | "campaign_startDate" | "campaign_endDate" => {
+                        // Convert to snake_case: campaign_startDate -> campaign_start_date
+                        let snake = item
+                            .field
+                            .replace("startDate", "start_date")
+                            .replace("endDate", "end_date");
+                        Some(snake)
+                    }
+                    // Offer fields - add "offer_" prefix and use snake_case
+                    "id" => Some("offer_id".to_string()),
+                    "name" => Some("offer_name".to_string()),
+                    "startDate" => Some("offer_start_date".to_string()),
+                    "endDate" => Some("offer_end_date".to_string()),
+                    // For other fields with JSON extractions, convert camelCase to snake_case
+                    _ if expr.contains("->") || expr.contains("->>") => {
+                        // Convert camelCase to snake_case
+                        let snake = to_snake_case(&item.field);
+                        Some(snake)
+                    }
+                    // No alias needed for direct column access
+                    _ => None,
+                }
             } else {
                 item.alias.clone()
             };
@@ -274,10 +323,19 @@ pub fn translate_projections(
 /// Helper to check if a field is a JSONB field (all JSONB fields are stored as arrays)
 fn is_jsonb_array_field(field: &str, cards: &SchemaCards) -> bool {
     let field_camel = to_camel_case(field);
+
+    // Handle campaign_ prefix by also checking without it
+    let field_without_prefix = field.strip_prefix("campaign_").unwrap_or(field);
+    let field_without_prefix_camel = to_camel_case(field_without_prefix);
+
     for entity in &cards.entities {
         for json_path in &entity.json_paths {
             let path_field = json_path.path.trim_start_matches("$.");
-            if path_field == field || path_field == field_camel {
+            if path_field == field
+                || path_field == field_camel
+                || path_field == field_without_prefix
+                || path_field == field_without_prefix_camel
+            {
                 // All JSONB attributes are stored as arrays, regardless of data_type
                 return true;
             }
@@ -345,6 +403,14 @@ fn translate_filter(
 
                 let rhs = match &filter.value {
                     Value::String(s) => {
+                        // For brand field, use ILIKE for case-insensitive comparison
+                        if filter.field == "brand" {
+                            return Ok(format!(
+                                "{} ->> 0 ILIKE '{}'",
+                                jsonb_base,
+                                s.replace('\'', "''")
+                            ));
+                        }
                         format!("'[\"{}\"]'", s.replace('\'', "''").replace('"', "\\\""))
                     }
                     _ => {
@@ -389,6 +455,24 @@ fn translate_filter(
                         }
                     })?;
 
+                // For brand field, use LOWER for case-insensitive IN comparison
+                if filter.field == "brand" {
+                    let lowered_values = arr
+                        .iter()
+                        .filter_map(|v| match v {
+                            Value::String(s) => {
+                                Some(format!("'{}'", s.to_lowercase().replace('\'', "''")))
+                            }
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Ok(format!(
+                        "LOWER({} ->> 0) IN ({})",
+                        jsonb_base, lowered_values
+                    ));
+                }
+
                 let elements_sql = arr
                     .iter()
                     .filter_map(|v| match v {
@@ -428,6 +512,24 @@ fn translate_filter(
                     })
                 }
             };
+            // For brand field with overlaps, use case-insensitive comparison
+            if filter.field == "brand" {
+                let lowered_values = arr
+                    .iter()
+                    .filter_map(|v| match v {
+                        Value::String(s) => {
+                            Some(format!("'{}'", s.to_lowercase().replace('\'', "''")))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Ok(format!(
+                    "LOWER({} ->> 0) IN ({})",
+                    column_sql, lowered_values
+                ));
+            }
+
             let elements_sql = arr
                 .iter()
                 .filter_map(|v| match v {
@@ -473,7 +575,15 @@ fn translate_filter(
                     })
                 }
             };
-            Ok(format!("{} {} {}", lhs, op_str, rhs))
+
+            // Special handling for endDate fields with >= or > operators
+            // NULL endDate means unlimited/ongoing, so should be included
+            let is_end_date = filter.field == "endDate" || filter.field == "campaign_endDate";
+            if is_end_date && matches!(filter.op, FilterOp::Gte | FilterOp::Gt) {
+                Ok(format!("({} {} {} OR {} IS NULL)", lhs, op_str, rhs, lhs))
+            } else {
+                Ok(format!("{} {} {}", lhs, op_str, rhs))
+            }
         }
     }
 }

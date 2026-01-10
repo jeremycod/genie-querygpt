@@ -3,8 +3,8 @@ source: crates/querygpt-core/tests/sql_render_full_query.rs
 expression: normalize_sql(&sql)
 ---
 SELECT p.id,
-       c.id,
-       c.name,
+       c.id AS campaign_id,
+       c.name AS campaign_name,
        o.id,
        o.name,
        CASE WHEN o.end_date::date < CURRENT_DATE THEN 'EXPIRED' ELSE o.status END,

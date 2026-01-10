@@ -71,6 +71,88 @@ pub fn campaigns_offers_schema() -> WorkspaceSchema {
         },
     );
 
+    // Offer date fields (from offers_latest.attributes)
+    fields.insert(
+        "startDate".into(),
+        FieldDef {
+            field_type: FieldType::String,
+            selectable: true,
+            filterable: true,
+            sortable: true,
+        },
+    );
+    fields.insert(
+        "endDate".into(),
+        FieldDef {
+            field_type: FieldType::String,
+            selectable: true,
+            filterable: true,
+            sortable: true,
+        },
+    );
+
+    // Campaign date fields (from campaigns_latest.attributes)
+    fields.insert(
+        "campaign_startDate".into(),
+        FieldDef {
+            field_type: FieldType::String,
+            selectable: true,
+            filterable: true,
+            sortable: true,
+        },
+    );
+    fields.insert(
+        "campaign_endDate".into(),
+        FieldDef {
+            field_type: FieldType::String,
+            selectable: true,
+            filterable: true,
+            sortable: true,
+        },
+    );
+
+    // Campaign brand field (from campaigns_latest.attributes)
+    fields.insert(
+        "brand".into(),
+        FieldDef {
+            field_type: FieldType::StringArray,
+            selectable: true,
+            filterable: true,
+            sortable: false,
+        },
+    );
+
+    // Offer status field (from offers_latest.attributes)
+    fields.insert(
+        "status".into(),
+        FieldDef {
+            field_type: FieldType::StringArray,
+            selectable: true,
+            filterable: true,
+            sortable: false,
+        },
+    );
+
+    // Offer id and name fields (from offers_latest)
+    fields.insert(
+        "id".into(),
+        FieldDef {
+            field_type: FieldType::String,
+            selectable: true,
+            filterable: false,
+            sortable: true,
+        },
+    );
+    fields.insert(
+        "name".into(),
+        FieldDef {
+            field_type: FieldType::String,
+            selectable: true,
+            filterable: false,
+            sortable: true,
+        },
+    );
+
     // Derived/selectable fields
     fields.insert(
         "package_id".into(),

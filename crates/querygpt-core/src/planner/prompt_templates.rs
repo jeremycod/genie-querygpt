@@ -12,9 +12,13 @@ impl PromptTemplates {
         let schema_info = Self::format_schema_summary(&ctx.schema_summary);
         let examples_info = Self::format_examples(&ctx.examples);
         let constraints_info = Self::format_constraints(&ctx.constraints);
+        let current_date = ctx.current_date.as_deref().unwrap_or("YYYY-MM-DD");
 
         format!(
             r#"You are a ReportSpec generator. Generate valid JSON only.
+
+🗓️  CURRENT DATE: {}
+When the user says "today" or "now", use this date: {}
 
 CONSTRAINTS:
 - Output valid JSON matching the schema
@@ -96,6 +100,48 @@ NULL CHECKS:
 - To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
 - NEVER use "isnull" or "is_null" as operators - use "eq" with null value
 
+DATE HANDLING (CRITICAL - READ THE CURRENT DATE AT THE TOP OF THIS PROMPT):
+⚠️  "TODAY" or "NOW" QUERIES - USE THE CURRENT DATE SHOWN AT THE TOP:
+When user asks for campaigns/offers that are "live today" or "active now":
+- READ THE CURRENT DATE AT THE TOP OF THIS PROMPT
+- YOU MUST USE THAT EXACT DATE in your filters
+- WRONG EXAMPLES: "2025-01-01", "2021-12-10", "2024-12-31" (these are all WRONG)
+- CORRECT: Use the date shown at the very top of this prompt where it says "🗓️  CURRENT DATE"
+- An offer is live TODAY if:
+  * startDate <= CURRENT_DATE (from the top of this prompt)
+  * AND (endDate >= CURRENT_DATE OR endDate is NULL)
+- NULL endDate means UNLIMITED/ONGOING - the campaign/offer never expires
+- Example filters for "live today" - USE THE DATE FROM THE TOP:
+  {{"field": "startDate", "op": "lte", "value": "USE-CURRENT-DATE-FROM-TOP"}},
+  {{"field": "endDate", "op": "gte", "value": "USE-CURRENT-DATE-FROM-TOP"}}
+
+⚠️  DATE INFERENCE:
+When a date is mentioned WITHOUT a year (e.g., "December 10", "Jan 5"):
+- Always infer the most recent occurrence relative to the CURRENT DATE shown at the top
+- NEVER use arbitrary years like 2021 or 2020 or 2025
+- NEVER assume future dates unless explicitly stated
+
+⚠️  DATE RANGE QUERIES (for "live between", "active during", "running from X to Y"):
+For campaigns/offers that were "live" or "active" during a period [START, END]:
+- Use OVERLAP logic, NOT simple comparison
+- An offer is live during [START, END] if:
+  * startDate <= END (started before or during the period)
+  * AND (endDate >= START OR endDate is NULL)
+- NULL endDate means UNLIMITED/ONGOING
+- When user says "today", use the CURRENT DATE shown at the top of this prompt
+- Common mistake: Using "startDate >= START" misses campaigns that started before the period
+- Common mistake: Not handling NULL endDate means missing unlimited campaigns
+
+⚠️  CAMPAIGN/OFFER STATUS:
+- "LIVE" status alone is NOT sufficient for date range queries
+- A campaign can have status="LIVE" but be outside the date range
+- Always combine status checks with proper date range filters
+
+⚠️  NULL END DATE:
+- NULL or missing endDate means the campaign/offer is UNLIMITED/ONGOING
+- When checking "live today", NULL endDate should be treated as valid (ongoing)
+- The SQL generator handles NULL endDate automatically in >= comparisons
+
 REGION TO COUNTRY MAPPING:
 When users mention regions, expand them to ISO 3166-1 alpha-2 country codes:
 - APAC (Asia-Pacific): ["AF","AU","BD","BT","BN","KH","CN","HK","IN","ID","JP","KI","KP","KR","LA","MY","MV","MN","MM","NP","NZ","PK","PG","PH","SG","SB","LK","TW","TH","TL","VU","VN"]
@@ -103,15 +149,34 @@ When users mention regions, expand them to ISO 3166-1 alpha-2 country codes:
 - LATAM (Latin America): ["AR","BZ","BO","BR","CL","CO","CR","CU","DO","EC","SV","GT","HT","HN","MX","NI","PA","PY","PE","UY","VE"]
 - NA (North America): ["US","CA"]
 
-IMPORTANT: Always use country codes, never use region names as literal values!
+IMPORTANT: Always use ISO 3166-1 alpha-2 country codes:
+- Use "GB" for United Kingdom (NOT "UK")
+- Use "US" for United States (NOT "USA")
+- Never use region names as literal values in filters
+
+CAMPAIGN vs OFFER FIELDS:
+When users ask for both campaign and offer data:
+- Campaign fields use "campaign_" prefix: "campaign_id", "campaign_name", "campaign_startDate", "campaign_endDate"
+- Offer fields have no prefix: "id", "name", "startDate", "endDate"
+- Example: "Campaign ID and name, offer id and name" →
+  {{"field": "campaign_id"}}, {{"field": "campaign_name"}}, {{"field": "id"}}, {{"field": "name"}}
 
 BRAND FILTERING (ESPN, DISNEY, STAR, HULU):
 When users ask for offers by brand (ESPN, DISNEY, STAR, HULU):
 - Use the "brand" field in filters: {{"field": "brand", "op": "eq", "value": "ESPN"}}
-- Brand values are uppercase: "ESPN", "DISNEY", "STAR", "HULU"
+- Brand filtering is case-insensitive - you can use any case (e.g., "espn", "ESPN", "Espn")
+- The database uses case-insensitive comparison (ILIKE/LOWER), so case doesn't matter
+- Common brand values: "ESPN", "DISNEY", "STAR", "HULU"
 - The system will automatically handle joins between campaigns and offers
-- Example: "ESPN offers" → {{"field": "brand", "op": "eq", "value": "ESPN"}}"#,
-            constraints_info, ctx.workspace, schema_info, examples_info, ctx.workspace
+- Example: "ESPN offers" → {{"field": "brand", "op": "eq", "value": "espn"}}
+- Example: "disney or hulu" → {{"field": "brand", "op": "in", "value": ["disney", "hulu"]}}"#,
+            current_date,
+            current_date,
+            constraints_info,
+            ctx.workspace,
+            schema_info,
+            examples_info,
+            ctx.workspace
         )
     }
 
@@ -124,9 +189,13 @@ When users ask for offers by brand (ESPN, DISNEY, STAR, HULU):
     ) -> String {
         let schema_info = Self::format_schema_summary(&ctx.schema_summary);
         let constraints_info = Self::format_constraints(&ctx.constraints);
+        let current_date = ctx.current_date.as_deref().unwrap_or("YYYY-MM-DD");
 
         format!(
             r#"Previous attempt failed compilation. Fix the ReportSpec.
+
+🗓️  CURRENT DATE: {}
+When the user says "today" or "now", use this date: {}
 
 ORIGINAL PROMPT: {}
 PREVIOUS SPEC: {}
@@ -190,7 +259,80 @@ NULL CHECKS:
 - To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
 - NEVER use "isnull" or "is_null" as operators - use "eq" with null value
 
+DATE HANDLING (CRITICAL - READ THE CURRENT DATE AT THE TOP OF THIS PROMPT):
+⚠️  "TODAY" or "NOW" QUERIES - USE THE CURRENT DATE SHOWN AT THE TOP:
+When user asks for campaigns/offers that are "live today" or "active now":
+- READ THE CURRENT DATE AT THE TOP OF THIS PROMPT
+- YOU MUST USE THAT EXACT DATE in your filters
+- WRONG EXAMPLES: "2025-01-01", "2021-12-10", "2024-12-31" (these are all WRONG)
+- CORRECT: Use the date shown at the very top of this prompt where it says "🗓️  CURRENT DATE"
+- An offer is live TODAY if:
+  * startDate <= CURRENT_DATE (from the top of this prompt)
+  * AND (endDate >= CURRENT_DATE OR endDate is NULL)
+- NULL endDate means UNLIMITED/ONGOING - the campaign/offer never expires
+- Example filters for "live today" - USE THE DATE FROM THE TOP:
+  {{"field": "startDate", "op": "lte", "value": "USE-CURRENT-DATE-FROM-TOP"}},
+  {{"field": "endDate", "op": "gte", "value": "USE-CURRENT-DATE-FROM-TOP"}}
+
+⚠️  DATE INFERENCE:
+When a date is mentioned WITHOUT a year (e.g., "December 10", "Jan 5"):
+- Always infer the most recent occurrence relative to the CURRENT DATE shown at the top
+- NEVER use arbitrary years like 2021 or 2020 or 2025
+- NEVER assume future dates unless explicitly stated
+
+⚠️  DATE RANGE QUERIES (for "live between", "active during", "running from X to Y"):
+For campaigns/offers that were "live" or "active" during a period [START, END]:
+- Use OVERLAP logic, NOT simple comparison
+- An offer is live during [START, END] if:
+  * startDate <= END (started before or during the period)
+  * AND (endDate >= START OR endDate is NULL)
+- NULL endDate means UNLIMITED/ONGOING
+- When user says "today", use the CURRENT DATE shown at the top of this prompt
+- Common mistake: Using "startDate >= START" misses campaigns that started before the period
+- Common mistake: Not handling NULL endDate means missing unlimited campaigns
+
+⚠️  CAMPAIGN/OFFER STATUS:
+- "LIVE" status alone is NOT sufficient for date range queries
+- A campaign can have status="LIVE" but be outside the date range
+- Always combine status checks with proper date range filters
+
+⚠️  NULL END DATE:
+- NULL or missing endDate means the campaign/offer is UNLIMITED/ONGOING
+- When checking "live today", NULL endDate should be treated as valid (ongoing)
+- The SQL generator handles NULL endDate automatically in >= comparisons
+
+REGION TO COUNTRY MAPPING:
+When users mention regions, expand them to ISO 3166-1 alpha-2 country codes:
+- APAC (Asia-Pacific): ["AF","AU","BD","BT","BN","KH","CN","HK","IN","ID","JP","KI","KP","KR","LA","MY","MV","MN","MM","NP","NZ","PK","PG","PH","SG","SB","LK","TW","TH","TL","VU","VN"]
+- EMEA (Europe/Middle East/Africa): ["AL","DZ","AD","AO","AM","AT","AZ","BH","BY","BE","BA","BW","BG","BI","CM","CV","CF","TD","KM","CG","HR","CY","CZ","DK","DJ","EG","GQ","ER","EE","ET","FI","FR","GA","GM","GE","DE","GH","GR","GN","GW","HU","IS","IR","IQ","IE","IL","IT","CI","JO","KZ","KE","KW","KG","LV","LB","LS","LR","LY","LI","LT","LU","MK","MG","MW","ML","MT","MR","MU","MD","MC","ME","MA","MZ","NA","NL","NE","NG","NO","OM","PS","PL","PT","QA","RO","RU","RW","ST","SA","SN","RS","SC","SL","SK","SI","SO","ZA","SS","ES","SD","SZ","SE","CH","SY","TJ","TZ","TG","TN","TR","TM","UG","UA","AE","GB","UZ","VA","YE","ZM","ZW"]
+- LATAM (Latin America): ["AR","BZ","BO","BR","CL","CO","CR","CU","DO","EC","SV","GT","HT","HN","MX","NI","PA","PY","PE","UY","VE"]
+- NA (North America): ["US","CA"]
+
+IMPORTANT: Always use ISO 3166-1 alpha-2 country codes:
+- Use "GB" for United Kingdom (NOT "UK")
+- Use "US" for United States (NOT "USA")
+- Never use region names as literal values in filters
+
+CAMPAIGN vs OFFER FIELDS:
+When users ask for both campaign and offer data:
+- Campaign fields use "campaign_" prefix: "campaign_id", "campaign_name", "campaign_startDate", "campaign_endDate"
+- Offer fields have no prefix: "id", "name", "startDate", "endDate"
+- Example: "Campaign ID and name, offer id and name" →
+  {{"field": "campaign_id"}}, {{"field": "campaign_name"}}, {{"field": "id"}}, {{"field": "name"}}
+
+BRAND FILTERING (ESPN, DISNEY, STAR, HULU):
+When users ask for offers by brand (ESPN, DISNEY, STAR, HULU):
+- Use the "brand" field in filters: {{"field": "brand", "op": "eq", "value": "ESPN"}}
+- Brand filtering is case-insensitive - you can use any case (e.g., "espn", "ESPN", "Espn")
+- The database uses case-insensitive comparison (ILIKE/LOWER), so case doesn't matter
+- Common brand values: "ESPN", "DISNEY", "STAR", "HULU"
+- The system will automatically handle joins between campaigns and offers
+- Example: "ESPN offers" → {{"field": "brand", "op": "eq", "value": "espn"}}
+- Example: "disney or hulu" → {{"field": "brand", "op": "in", "value": ["disney", "hulu"]}}
+
 IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
+            current_date,
+            current_date,
             original_prompt,
             serde_json::to_string_pretty(previous_spec).unwrap_or_default(),
             format!("{:?}", diagnostics),

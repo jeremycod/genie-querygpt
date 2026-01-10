@@ -1,17 +1,19 @@
 use crate::compile::diagnostics::CompilerDiagnostics;
+use serde::Serialize;
 use std::time::SystemTime;
 
 /// Trace information for planner operations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PlannerTrace {
     pub model: String,
     pub attempts: usize,
     pub revisions_occurred: bool,
     pub final_status: CompilationStatus,
+    #[serde(skip)]
     pub timestamp: SystemTime,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum CompilationStatus {
     Success,
     Failed,
