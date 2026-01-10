@@ -49,6 +49,8 @@ pub struct QueryResult {
     pub columns: Vec<ColumnInfo>,
     pub rows: Vec<Vec<serde_json::Value>>,
     pub total_rows: usize,
+    /// Total number of matching rows (before LIMIT) - only populated in preview mode
+    pub total_matching_rows: Option<usize>,
     pub execution_time_ms: u64,
 }
 
@@ -94,6 +96,7 @@ impl SqlExecutor {
     /// - Enforces row limits based on execution mode
     /// - Sets statement timeout from pool configuration
     /// - Converts PostgreSQL types to JSON
+    /// - In preview mode, runs COUNT(*) first to get total matching rows
     pub async fn execute(
         &self,
         sql: &str,
@@ -121,8 +124,42 @@ impl SqlExecutor {
                 message: e.to_string(),
             })?;
 
+        // Get total matching rows count if in preview mode
+        let total_matching_rows = match mode {
+            ExecutionMode::Preview { .. } => {
+                let count_sql = Self::build_count_query(sql);
+                let count_result = client.query_one(&count_sql, &[]).await.map_err(|e| {
+                    // Check for timeout
+                    if let Some(code) = e.code() {
+                        if code.code() == "57014" {
+                            return ExecutionError::Timeout(timeout_secs);
+                        }
+                    }
+
+                    ExecutionError::Database {
+                        sqlstate: e.code().map(|c| c.code().to_string()).unwrap_or_default(),
+                        message: format!("COUNT query failed: {}", e),
+                    }
+                })?;
+
+                // Extract count from result
+                let count: i64 = count_result.try_get(0).map_err(|e| {
+                    ExecutionError::TypeConversion(format!("Failed to extract count: {}", e))
+                })?;
+
+                Some(count as usize)
+            }
+            ExecutionMode::Export => None,
+        };
+
+        // Apply limit to SQL if in preview mode
+        let executed_sql = match mode {
+            ExecutionMode::Preview { limit } => Self::apply_limit_to_sql(sql, limit),
+            ExecutionMode::Export => sql.to_string(),
+        };
+
         // Execute the query
-        let rows = client.query(sql, &[]).await.map_err(|e| {
+        let rows = client.query(&executed_sql, &[]).await.map_err(|e| {
             // Check for timeout
             if let Some(code) = e.code() {
                 if code.code() == "57014" {
@@ -136,14 +173,8 @@ impl SqlExecutor {
             }
         })?;
 
-        // Check row limit
+        // Get row count (limit is already applied in SQL)
         let row_count = rows.len();
-        if mode.exceeds_limit(row_count) {
-            return Err(ExecutionError::TooLarge {
-                actual: row_count,
-                max: mode.row_limit(),
-            });
-        }
 
         // Extract column metadata
         let columns = if let Some(first_row) = rows.first() {
@@ -171,6 +202,7 @@ impl SqlExecutor {
             columns,
             rows: json_rows,
             total_rows: row_count,
+            total_matching_rows,
             execution_time_ms,
         })
     }
@@ -270,6 +302,56 @@ impl SqlExecutor {
         };
 
         Ok(json_value)
+    }
+
+    /// Apply LIMIT clause to SQL query
+    ///
+    /// If the SQL already has a LIMIT, replace it with the specified limit.
+    /// If the SQL doesn't have a LIMIT, append one.
+    fn apply_limit_to_sql(sql: &str, limit: usize) -> String {
+        let sql_upper = sql.to_uppercase();
+
+        // Check if SQL already has a LIMIT clause
+        if let Some(limit_pos) = sql_upper.rfind("LIMIT") {
+            // Find the end of the LIMIT clause (next semicolon, newline, or end of string)
+            let after_limit = &sql[limit_pos + 5..].trim_start();
+
+            // Extract just the SQL before LIMIT
+            let before_limit = &sql[..limit_pos].trim_end();
+
+            // Check if there's anything after the limit number (like ORDER BY came after)
+            // This is a simple heuristic - for complex cases, would need proper SQL parsing
+            format!("{} LIMIT {}", before_limit, limit)
+        } else {
+            // No LIMIT clause exists, append one
+            let trimmed = sql.trim_end();
+            // Remove trailing semicolon if present
+            let without_semicolon = trimmed.trim_end_matches(';').trim_end();
+            format!("{} LIMIT {}", without_semicolon, limit)
+        }
+    }
+
+    /// Build a COUNT(*) query from a SELECT query
+    ///
+    /// Wraps the original query in a subquery to count all matching rows
+    /// This approach handles complex queries (GROUP BY, DISTINCT, etc.) correctly
+    fn build_count_query(sql: &str) -> String {
+        let sql_upper = sql.to_uppercase();
+        let mut sql_trimmed = sql.trim_end_matches(';').trim().to_string();
+
+        // Remove ORDER BY clause if present (doesn't affect count)
+        if let Some(order_pos) = sql_upper.rfind(" ORDER BY ") {
+            sql_trimmed = sql_trimmed[..order_pos].trim().to_string();
+        }
+
+        // Remove LIMIT clause if present
+        let sql_upper = sql_trimmed.to_uppercase();
+        if let Some(limit_pos) = sql_upper.rfind(" LIMIT ") {
+            sql_trimmed = sql_trimmed[..limit_pos].trim().to_string();
+        }
+
+        // Wrap in subquery to get accurate count
+        format!("SELECT COUNT(*) FROM ({}) AS count_subquery", sql_trimmed)
     }
 }
 

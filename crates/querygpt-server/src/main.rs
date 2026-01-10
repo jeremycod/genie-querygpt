@@ -52,8 +52,13 @@ async fn query(
     // Step 2: Build planner context with schema summary and examples
     let schema_summary = SchemaSummary::from_registry(&state.registry);
     let examples = build_example_queries();
+
+    // Get current date for "today" queries
+    let current_date = chrono::Local::now().format("%Y-%m-%d").to_string();
+
     let context =
-        PlannerContext::enhanced(intent.workspace.clone(), schema_summary, examples, None);
+        PlannerContext::enhanced(intent.workspace.clone(), schema_summary, examples, None)
+            .with_current_date(current_date);
 
     // Step 3: Create orchestrator based on planner type
     let confirmation = ServerConfirmation::new(req.auto_approve);
@@ -81,6 +86,9 @@ async fn query(
         } => {
             let sql = render_sql(&plan)
                 .map_err(|e| AppError::RenderError(format!("Failed to render SQL: {}", e)))?;
+
+            // Debug: Print generated SQL
+            eprintln!("[DEBUG] Generated SQL:\n{}", sql);
 
             // Step 7: Execute preview if requested and database is configured
             let preview_data = if req.execute_preview {
@@ -466,11 +474,7 @@ async fn main() {
             "Not configured (preview execution disabled)"
         }
     );
-    println!(
-        "CORS: Enabled for {}",
-        std::env::var("CORS_ALLOWED_ORIGINS")
-            .unwrap_or_else(|_| "http://localhost:5173".to_string())
-    );
+    println!("CORS: Enabled for http://localhost:5173");
     println!();
     println!("Endpoints:");
     println!("  POST /query    - Submit natural language query");

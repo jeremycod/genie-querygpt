@@ -29,6 +29,9 @@ pub struct PlannerContext {
     pub report_spec_schema: Option<serde_json::Value>,
     pub examples: Vec<ExamplePair>,
     pub constraints: PlannerConstraints,
+    /// Current date in YYYY-MM-DD format for "today" queries
+    #[serde(default)]
+    pub current_date: Option<String>,
     // Legacy fields for backward compatibility
     #[serde(default)]
     pub available_fields: Vec<String>,
@@ -50,6 +53,7 @@ impl PlannerContext {
             report_spec_schema: None,
             examples: vec![],
             constraints: PlannerConstraints::default(),
+            current_date: None,
             available_fields,
             available_tables,
         }
@@ -71,9 +75,16 @@ impl PlannerContext {
             report_spec_schema: None,
             examples,
             constraints: constraints.unwrap_or_default(),
+            current_date: None,
             available_fields,
             available_tables,
         }
+    }
+
+    /// Set the current date for "today" queries
+    pub fn with_current_date(mut self, date: String) -> Self {
+        self.current_date = Some(date);
+        self
     }
 }
 

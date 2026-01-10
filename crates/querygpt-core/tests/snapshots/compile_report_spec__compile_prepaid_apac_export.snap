@@ -172,12 +172,12 @@ expression: plan
     {
       "field": "campaign_id",
       "expression": "c.id",
-      "alias": null
+      "alias": "campaign_id"
     },
     {
       "field": "campaign_name",
       "expression": "c.name",
-      "alias": null
+      "alias": "campaign_name"
     },
     {
       "field": "offer_id",

@@ -1,10 +1,11 @@
 ---
-source: crates/querygpt-core/tests/sql_render_full_query.rs
-expression: normalize_sql(&sql)
+source: crates/querygpt-core/tests/pipeline_sql_snapshots.rs
+assertion_line: 46
+expression: sql
 ---
 SELECT p.id,
-       c.id AS campaign_id,
-       c.name AS campaign_name,
+       c.id AS campaignId,
+       c.name AS campaignName,
        o.id,
        o.name,
        CASE WHEN o.end_date::date < CURRENT_DATE THEN 'EXPIRED' ELSE o.status END,

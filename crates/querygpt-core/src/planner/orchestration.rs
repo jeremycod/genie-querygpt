@@ -69,12 +69,19 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
         spec: &ReportSpec,
     ) -> OrchestrationResult {
         match compile_report_spec(registry, spec) {
-            Ok(plan) => OrchestrationResult::Success {
-                plan,
-                draft: None,
-                diffs: vec![], // No changes in compile-only mode
-                trace: None,   // No trace in compile-only mode
-            },
+            Ok(plan) => {
+                // Debug: Print intermediate plan
+                if let Ok(plan_json) = serde_json::to_string_pretty(&plan) {
+                    eprintln!("[DEBUG] IntermediatePlan:\n{}", plan_json);
+                }
+
+                OrchestrationResult::Success {
+                    plan,
+                    draft: None,
+                    diffs: vec![], // No changes in compile-only mode
+                    trace: None,   // No trace in compile-only mode
+                }
+            }
             Err(diagnostics) => OrchestrationResult::CompilationFailed {
                 diagnostics,
                 draft: None,
@@ -121,6 +128,11 @@ impl<P: Planner, C: UserConfirmation> Orchestrator<P, C> {
             // Try compilation
             match compile_report_spec(registry, &current_draft.spec) {
                 Ok(plan) => {
+                    // Debug: Print intermediate plan
+                    if let Ok(plan_json) = serde_json::to_string_pretty(&plan) {
+                        eprintln!("[DEBUG] IntermediatePlan:\n{}", plan_json);
+                    }
+
                     FlowLogger::compiler_result(true);
 
                     // Compilation succeeded - check for changes and get user confirmation

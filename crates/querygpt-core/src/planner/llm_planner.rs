@@ -261,7 +261,14 @@ impl Planner for LlmPlanner {
         prompt: &str,
         ctx: PlannerContext,
     ) -> PlannerResult<ReportSpecDraft> {
+        eprintln!("[DEBUG] Current date in context: {:?}", ctx.current_date);
         let system_prompt = self.build_system_prompt(&ctx);
+        eprintln!(
+            "[DEBUG] System prompt (first 1000 chars):\n{}\n...",
+            &system_prompt[..system_prompt.len().min(1000)]
+        );
+        eprintln!("[DEBUG] User prompt: {}", prompt);
+
         let llm_output = self
             .make_llm_request(system_prompt, prompt.to_string())
             .await?;
@@ -279,9 +286,17 @@ impl Planner for LlmPlanner {
         ctx: PlannerContext,
         diagnostics: &CompilerDiagnostics,
     ) -> PlannerResult<ReportSpecDraft> {
+        eprintln!(
+            "[DEBUG] REVISION - Current date in context: {:?}",
+            ctx.current_date
+        );
+        let current_date = ctx.current_date.as_deref().unwrap_or("YYYY-MM-DD");
         // Build revision prompt with diagnostic context
         let system_prompt = format!(
             r#"You are a ReportSpec generator. The previous attempt failed compilation.
+
+🗓️  CURRENT DATE: {}
+When the user says "today" or "now", use this date: {}
 
 COMPILER ERRORS: {}
 
@@ -290,6 +305,20 @@ CONSTRAINTS:
 - Use only fields/tables from schema summary
 - Fix the errors mentioned above
 - No SQL generation
+
+🚨 DATE HANDLING - CRITICAL 🚨
+When the user says "today" or "now":
+- YOU MUST USE THE DATE SHOWN ABOVE: {}
+- WRONG: "2025-01-01", "2021-12-10", "2024-12-31"
+- CORRECT: "{}" (the date shown at the top)
+- For "live today" filters use:
+  {{"field": "startDate", "op": "lte", "value": "{}"}},
+  {{"field": "endDate", "op": "gte", "value": "{}"}}
+
+🚨 COUNTRY CODES 🚨
+- Use "GB" for United Kingdom (NOT "UK")
+- Use "US" for United States (NOT "USA")
+- Always use ISO 3166-1 alpha-2 codes
 
 🚨 FIELD NAME RULES - PAY ATTENTION 🚨
 If error says 'unknown field "o.id"' → Use "id" instead
@@ -340,12 +369,24 @@ CRITICAL JSON SCHEMA RULES:
 - "filters" is an array of objects with "field", "op", and "value" only
 
 IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
+            current_date,
+            current_date,
             format!("{:?}", diagnostics),
+            current_date,
+            current_date,
+            current_date,
+            current_date,
             ctx.workspace,
             ctx.available_tables.join(", "),
             ctx.available_fields.join(", "),
             ctx.workspace
         );
+
+        eprintln!(
+            "[DEBUG] REVISION - System prompt (first 1000 chars):\n{}\n...",
+            &system_prompt[..system_prompt.len().min(1000)]
+        );
+        eprintln!("[DEBUG] REVISION - User prompt: {}", prompt);
 
         let llm_output = self
             .make_llm_request(system_prompt, prompt.to_string())
