@@ -135,6 +135,27 @@ impl LlmPlanner {
                 }
             }
 
+            // If we see "]," and we're in a value array context,
+            // and the next line starts a new field, add the missing }
+            if in_value_array
+                && bracket_count == 0
+                && trimmed.ends_with("],")
+                && i + 1 < lines.len()
+            {
+                let next_line = lines[i + 1].trim();
+                if next_line.starts_with(r#"{"field""#) {
+                    // Add the missing }
+                    result.push_str(&line.replace("],", "]},"));
+                    result.push('\n');
+                    in_value_array = false;
+                    eprintln!(
+                        "[DEBUG] Repaired missing }} after value array at line {}",
+                        i + 1
+                    );
+                    continue;
+                }
+            }
+
             // Reset if we've closed all brackets
             if in_value_array && bracket_count == 0 {
                 in_value_array = false;
@@ -368,6 +389,16 @@ CRITICAL JSON SCHEMA RULES:
 - Do NOT add fields like "condition" - they don't exist in the schema
 - "filters" is an array of objects with "field", "op", and "value" only
 
+🚨 REGION TO COUNTRY MAPPING - CRITICAL 🚨
+When users mention regions, expand them to ISO 3166-1 alpha-2 country codes:
+- APAC (Asia-Pacific): ["AF","AU","BD","BT","BN","KH","CN","HK","IN","ID","JP","KI","KP","KR","LA","MY","MV","MN","MM","NP","NZ","PK","PG","PH","SG","SB","LK","TW","TH","TL","VU","VN"]
+- EMEA (Europe/Middle East/Africa): ["AL","DZ","AD","AO","AM","AT","AZ","BH","BY","BE","BA","BW","BG","BI","CM","CV","CF","TD","KM","CG","HR","CY","CZ","DK","DJ","EG","GQ","ER","EE","ET","FI","FR","GA","GM","GE","DE","GH","GR","GN","GW","HU","IS","IR","IQ","IE","IL","IT","CI","JO","KZ","KE","KW","KG","LV","LB","LS","LR","LY","LI","LT","LU","MK","MG","MW","ML","MT","MR","MU","MD","MC","ME","MA","MZ","NA","NL","NE","NG","NO","OM","PS","PL","PT","QA","RO","RU","RW","ST","SA","SN","RS","SC","SL","SK","SI","SO","ZA","SS","ES","SD","SZ","SE","CH","SY","TJ","TZ","TG","TN","TR","TM","UG","UA","AE","GB","UZ","VA","YE","ZM","ZW"]
+- LATAM (Latin America): ["AR","BZ","BO","BR","CL","CO","CR","CU","DO","EC","SV","GT","HT","HN","MX","NI","PA","PY","PE","UY","VE"]
+- NA (North America): ["US","CA"]
+
+NEVER use region names like "EMEA", "APAC", "LATAM", "NA" as literal values in filters!
+ALWAYS expand them to the full list of country codes shown above.
+
 IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
             current_date,
             current_date,
@@ -397,5 +428,69 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
             rationale: llm_output.notes,
             assumptions: llm_output.assumptions,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_repair_json_missing_closing_brace() {
+        let client = Box::new(crate::planner::mock_client::MockClient::new());
+        let planner = LlmPlanner::new(client, "test-model".to_string());
+
+        // Test case: missing } after array close
+        let malformed = r#"{
+  "report_spec": {
+    "version": 1,
+    "workspace": "campaigns_offers",
+    "select": [
+      {"field": "id", "alias": null}
+    ],
+    "filters": [
+      {"field": "countries", "op": "in", "value": ["US", "GB", "FR"],
+      {"field": "status", "op": "eq", "value": "LIVE"}
+    ],
+    "order_by": [],
+    "mode": "preview",
+    "pagination": null
+  },
+  "assumptions": [],
+  "open_questions": []
+}"#;
+
+        let repaired = planner.repair_json(malformed);
+        assert!(repaired.contains(r#"["US", "GB", "FR"]},"#));
+        assert!(!repaired.contains(r#"["US", "GB", "FR"],"#));
+    }
+
+    #[test]
+    fn test_repair_json_missing_closing_bracket() {
+        let client = Box::new(crate::planner::mock_client::MockClient::new());
+        let planner = LlmPlanner::new(client, "test-model".to_string());
+
+        // Test case: missing ] before }
+        let malformed = r#"{
+  "report_spec": {
+    "version": 1,
+    "workspace": "campaigns_offers",
+    "select": [
+      {"field": "id", "alias": null}
+    ],
+    "filters": [
+      {"field": "countries", "op": "in", "value": ["US", "GB", "FR"},
+      {"field": "status", "op": "eq", "value": "LIVE"}
+    ],
+    "order_by": [],
+    "mode": "preview",
+    "pagination": null
+  },
+  "assumptions": [],
+  "open_questions": []
+}"#;
+
+        let repaired = planner.repair_json(malformed);
+        assert!(repaired.contains(r#"["US", "GB", "FR"]},"#));
     }
 }

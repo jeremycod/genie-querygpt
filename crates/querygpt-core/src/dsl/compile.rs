@@ -123,6 +123,12 @@ fn field_to_sql_expr(
         "campaign_name" => alias_map
             .get("campaigns_latest")
             .map(|a| format!("{}.name", a)),
+        "campaign_startDate" => alias_map
+            .get("campaigns_latest")
+            .map(|a| format!("{}.attributes -> 'startDate'", a)),
+        "campaign_endDate" => alias_map
+            .get("campaigns_latest")
+            .map(|a| format!("{}.attributes -> 'endDate'", a)),
         "offer_id" => alias_map.get("offers_latest").map(|a| format!("{}.id", a)),
         "offer_name" => alias_map
             .get("offers_latest")
@@ -317,10 +323,19 @@ pub fn translate_projections(
 /// Helper to check if a field is a JSONB field (all JSONB fields are stored as arrays)
 fn is_jsonb_array_field(field: &str, cards: &SchemaCards) -> bool {
     let field_camel = to_camel_case(field);
+
+    // Handle campaign_ prefix by also checking without it
+    let field_without_prefix = field.strip_prefix("campaign_").unwrap_or(field);
+    let field_without_prefix_camel = to_camel_case(field_without_prefix);
+
     for entity in &cards.entities {
         for json_path in &entity.json_paths {
             let path_field = json_path.path.trim_start_matches("$.");
-            if path_field == field || path_field == field_camel {
+            if path_field == field
+                || path_field == field_camel
+                || path_field == field_without_prefix
+                || path_field == field_without_prefix_camel
+            {
                 // All JSONB attributes are stored as arrays, regardless of data_type
                 return true;
             }
