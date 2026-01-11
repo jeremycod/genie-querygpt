@@ -227,6 +227,7 @@ CHECKING IF PRICE IS DEFINED:
         let schema_info = Self::format_schema_summary(&ctx.schema_summary);
         let constraints_info = Self::format_constraints(&ctx.constraints);
         let current_date = ctx.current_date.as_deref().unwrap_or("YYYY-MM-DD");
+        let diagnostics_str = format!("{:?}", diagnostics);
 
         format!(
             r#"Previous attempt failed compilation. Fix the ReportSpec.
@@ -409,7 +410,7 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
             current_date,
             original_prompt,
             serde_json::to_string_pretty(previous_spec).unwrap_or_default(),
-            format!("{:?}", diagnostics),
+            diagnostics_str,
             constraints_info,
             ctx.workspace,
             schema_info,

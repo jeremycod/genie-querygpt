@@ -1,0 +1,359 @@
+{
+  "version": "1.0",
+  "database": "genie_db",
+  "workspace": "pricing_discounts",
+  "conventions": {
+    "profile_column": "profile",
+    "version_column": "version",
+    "deleted_column": "deleted",
+    "latest_views": [
+      "products_latest",
+      "discounts_latest"
+    ],
+    "notes": [
+      "Entity heads must be read from *_latest MVs to avoid per-query window functions.",
+      "Deleted rows are not filtered out in *_latest; consumers must filter WHERE deleted=false.",
+      "Price amounts are stored in minor currency units (e.g., cents for USD).",
+      "Prices table does not have versioning - it's a simple dimensional table."
+    ]
+  },
+  "entities": [
+    {
+      "name": "products_latest",
+      "kind": "materialized_view",
+      "description": "Latest version of each product per (id, profile). Products are the base entities that have prices.",
+      "primary_key": [
+        "id",
+        "profile"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Product identifier",
+          "pii": false
+        },
+        {
+          "name": "name",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Product name",
+          "pii": false
+        },
+        {
+          "name": "description",
+          "data_type": "text",
+          "nullable": true,
+          "description": "Product description",
+          "pii": false
+        },
+        {
+          "name": "attributes",
+          "data_type": "jsonb",
+          "nullable": true,
+          "description": "Product attributes blob",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Product version",
+          "pii": false
+        },
+        {
+          "name": "deleted",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Soft delete flag",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [
+        {
+          "name": "active_products",
+          "sql": "deleted = false",
+          "description": "Filter for non-deleted products"
+        }
+      ],
+      "tags": [
+        "products",
+        "entity_head"
+      ]
+    },
+    {
+      "name": "prices",
+      "kind": "table",
+      "description": "Prices for products. Each product can have multiple prices (different currencies, regions, etc.). Prices are stored in minor currency units.",
+      "primary_key": [
+        "id",
+        "profile"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Price identifier",
+          "pii": false
+        },
+        {
+          "name": "amount",
+          "data_type": "integer",
+          "nullable": false,
+          "description": "Price amount in minor currency units (e.g., cents for USD, pence for GBP)",
+          "pii": false
+        },
+        {
+          "name": "currency",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Currency code (e.g., USD, EUR, GBP)",
+          "pii": false
+        },
+        {
+          "name": "product_id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "FK to products - which product this price is for",
+          "pii": false
+        },
+        {
+          "name": "active",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Whether this price is currently active",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [
+        {
+          "name": "active_prices",
+          "sql": "active = true",
+          "description": "Filter for active prices only"
+        },
+        {
+          "name": "by_currency",
+          "sql": "currency = 'USD'",
+          "description": "Filter by currency code"
+        }
+      ],
+      "tags": [
+        "prices",
+        "dimension"
+      ]
+    },
+    {
+      "name": "discounts_latest",
+      "kind": "materialized_view",
+      "description": "Latest version of each discount per (id, profile). Discounts are applied to offers.",
+      "primary_key": [
+        "id",
+        "profile"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Discount identifier",
+          "pii": false
+        },
+        {
+          "name": "currency",
+          "data_type": "varchar",
+          "nullable": true,
+          "description": "Currency for this discount (if applicable)",
+          "pii": false
+        },
+        {
+          "name": "attributes",
+          "data_type": "jsonb",
+          "nullable": true,
+          "description": "Discount attributes blob (may contain discount amount, percentage, etc.)",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Discount version",
+          "pii": false
+        },
+        {
+          "name": "deleted",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Soft delete flag",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [
+        {
+          "name": "active_discounts",
+          "sql": "deleted = false",
+          "description": "Filter for non-deleted discounts"
+        }
+      ],
+      "tags": [
+        "discounts",
+        "entity_head"
+      ]
+    },
+    {
+      "name": "offers_latest",
+      "kind": "materialized_view",
+      "description": "Latest version of each offer. Included here to show which offers use which discounts (via discount_id).",
+      "primary_key": [
+        "id",
+        "profile"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Offer identifier",
+          "pii": false
+        },
+        {
+          "name": "name",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Offer name",
+          "pii": false
+        },
+        {
+          "name": "discount_id",
+          "data_type": "varchar",
+          "nullable": true,
+          "description": "FK to discounts - which discount is applied to this offer",
+          "pii": false
+        },
+        {
+          "name": "status",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Offer status",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Offer version",
+          "pii": false
+        },
+        {
+          "name": "deleted",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Soft delete flag",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [
+        {
+          "name": "offers_with_discounts",
+          "sql": "discount_id IS NOT NULL",
+          "description": "Filter for offers that have discounts"
+        }
+      ],
+      "tags": [
+        "offers",
+        "entity_head"
+      ]
+    }
+  ],
+  "join_graph": {
+    "nodes": [
+      "products_latest",
+      "prices",
+      "discounts_latest",
+      "offers_latest"
+    ],
+    "edges": [
+      {
+        "from": "products_latest",
+        "to": "prices",
+        "join_type": "left",
+        "on": [
+          "prices.product_id = products_latest.id",
+          "prices.profile = products_latest.profile"
+        ],
+        "cardinality": "1:n",
+        "safe": true,
+        "notes": [
+          "A product can have multiple prices (different currencies, regions)",
+          "Use LEFT JOIN to include products without prices"
+        ]
+      },
+      {
+        "from": "offers_latest",
+        "to": "discounts_latest",
+        "join_type": "left",
+        "on": [
+          "discounts_latest.id = offers_latest.discount_id",
+          "discounts_latest.profile = offers_latest.profile"
+        ],
+        "cardinality": "n:1",
+        "safe": true,
+        "notes": [
+          "An offer may have one discount",
+          "Use LEFT JOIN to include offers without discounts"
+        ]
+      }
+    ]
+  },
+  "derived_fields": [
+    {
+      "name": "price_in_dollars",
+      "sql": "CAST(prices.amount AS DECIMAL) / 100",
+      "description": "Convert minor currency units to major units (e.g., cents to dollars)",
+      "depends_on": [
+        "prices.amount"
+      ]
+    },
+    {
+      "name": "product_name",
+      "sql": "products_latest.name",
+      "description": "Explicit product name field to avoid ambiguity",
+      "depends_on": [
+        "products_latest.name"
+      ]
+    }
+  ]
+}
