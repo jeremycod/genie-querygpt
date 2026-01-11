@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 pub struct QueryRequest {
     /// Natural language prompt from user
     pub prompt: String,
+    /// Optional workspace override (if not specified, will be automatically classified)
+    pub workspace: Option<String>,
     /// Whether to auto-approve changes (skip confirmation)
     #[serde(default)]
     pub auto_approve: bool,
@@ -68,6 +70,7 @@ pub enum QueryResponse {
     Success {
         sql: String,
         plan: IntermediatePlan,
+        workspace: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         rationale: Option<String>,
         #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -261,4 +264,19 @@ pub struct ExportRequest {
 pub enum ExportFormat {
     Csv,
     Json,
+}
+
+/// Response for workspace listing (GET /workspaces)
+#[derive(Debug, Serialize)]
+pub struct WorkspacesResponse {
+    pub workspaces: Vec<WorkspaceInfo>,
+}
+
+/// Information about a single workspace
+#[derive(Debug, Serialize)]
+pub struct WorkspaceInfo {
+    pub name: String,
+    pub description: String,
+    pub tags: Vec<String>,
+    pub entities: Vec<String>,
 }

@@ -7,36 +7,38 @@ mod session;
 
 use api_types::{
     ConfirmRequest, ErrorResponse, ExecuteRequest, ExportFormat, ExportRequest, QueryRequest,
-    QueryResponse,
+    QueryResponse, WorkspaceInfo, WorkspacesResponse,
 };
 use axum::{
     extract::State,
     http::{header, Method, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use confirmation::ServerConfirmation;
 use db::DbPool;
 use executor::{ExecutionMode, SqlExecutor};
-use querygpt_core::agents::intent;
+use querygpt_core::agents::intent::IntentAgent;
 use querygpt_core::planner::llm_planner::LlmPlanner;
 use querygpt_core::planner::openai_client::OpenAIClient;
 use querygpt_core::planner::orchestration::{OrchestrationResult, Orchestrator};
 use querygpt_core::planner::planner::PlannerContext;
 use querygpt_core::planner::schema_summary::SchemaSummary;
-use querygpt_core::schema::registry::SchemaRegistry;
+use querygpt_core::schema::registry::WorkspaceRegistry;
 use querygpt_core::sql::render::render_sql;
 use session::SessionStore;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 /// Shared application state
 #[derive(Clone)]
 struct AppState {
     session_store: SessionStore,
-    /// Schema registry loaded from configuration
-    registry: Arc<SchemaRegistry>,
+    /// Workspace registry loaded from configuration
+    workspace_registry: Arc<WorkspaceRegistry>,
+    /// Intent agent for workspace classification
+    intent_agent: Arc<IntentAgent>,
     /// Database connection pool (optional - only if DATABASE_URL is configured)
     db_pool: Option<DbPool>,
 }
@@ -46,21 +48,56 @@ async fn query(
     State(state): State<AppState>,
     Json(req): Json<QueryRequest>,
 ) -> Result<Json<QueryResponse>, AppError> {
-    // Step 1: Classify intent to determine workspace
-    let intent = intent::classify(&req.prompt);
+    // Step 1: Determine workspace (manual override or auto-classify)
+    let workspace = if let Some(ref manual_workspace) = req.workspace {
+        // Manual workspace specified
+        if !state.workspace_registry.has_workspace(manual_workspace) {
+            return Err(AppError::InvalidWorkspace(format!(
+                "Workspace '{}' not found. Available workspaces: {}",
+                manual_workspace,
+                state.workspace_registry.list_workspaces().join(", ")
+            )));
+        }
+        tracing::info!("Using manually specified workspace: {}", manual_workspace);
+        manual_workspace.clone()
+    } else {
+        // Auto-classify workspace from prompt
+        let classification = state
+            .intent_agent
+            .classify_workspace(&req.prompt)
+            .await
+            .map_err(|e| {
+                AppError::WorkspaceClassification(format!("Failed to classify workspace: {}", e))
+            })?;
 
-    // Step 2: Build planner context with schema summary and examples (using shared module)
-    let schema_summary = SchemaSummary::from_registry(&state.registry);
+        tracing::info!(
+            "Classified workspace: {} (confidence: {:?}, reason: {})",
+            classification.workspace,
+            classification.confidence,
+            classification.reason
+        );
+        classification.workspace
+    };
+
+    // Step 2: Load the workspace schema
+    let schema_registry = state
+        .workspace_registry
+        .load_workspace(&workspace)
+        .map_err(|e| {
+            AppError::WorkspaceLoad(format!("Failed to load workspace '{}': {}", workspace, e))
+        })?;
+
+    // Step 3: Build planner context with schema summary and examples (using shared module)
+    let schema_summary = SchemaSummary::from_registry(&schema_registry);
     let examples = querygpt_core::examples::build_example_queries();
 
     // Get current date for "today" queries
     let current_date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
-    let context =
-        PlannerContext::enhanced(intent.workspace.clone(), schema_summary, examples, None)
-            .with_current_date(current_date);
+    let context = PlannerContext::enhanced(workspace.clone(), schema_summary, examples, None)
+        .with_current_date(current_date);
 
-    // Step 3: Create orchestrator based on planner type
+    // Step 4: Create orchestrator based on planner type
     let confirmation = ServerConfirmation::new(req.auto_approve);
     let result = if let Ok(client) = OpenAIClient::from_env() {
         let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-3.5-turbo".to_string());
@@ -68,7 +105,7 @@ async fn query(
         let orchestrator =
             Orchestrator::new(planner, confirmation).with_max_retries(req.max_attempts);
         orchestrator
-            .suggest_and_compile(&state.registry, &req.prompt, context)
+            .suggest_and_compile(&schema_registry, &req.prompt, context)
             .await
     } else {
         // Using shared fixtures module
@@ -76,7 +113,7 @@ async fn query(
         let orchestrator =
             Orchestrator::new(planner, confirmation).with_max_retries(req.max_attempts);
         orchestrator
-            .suggest_and_compile(&state.registry, &req.prompt, context)
+            .suggest_and_compile(&schema_registry, &req.prompt, context)
             .await
     };
 
@@ -125,6 +162,7 @@ async fn query(
             Ok(Json(QueryResponse::Success {
                 sql,
                 plan,
+                workspace,
                 rationale: draft.as_ref().and_then(|d| d.rationale.clone()),
                 assumptions: draft.map(|d| d.assumptions).unwrap_or_default(),
                 trace,
@@ -214,6 +252,23 @@ async fn execute(
     Ok(Json(result))
 }
 
+/// List all available workspaces (GET /workspaces)
+async fn list_workspaces(State(state): State<AppState>) -> Json<WorkspacesResponse> {
+    let workspaces = state
+        .workspace_registry
+        .all_metadata()
+        .iter()
+        .map(|metadata| WorkspaceInfo {
+            name: metadata.name.clone(),
+            description: metadata.description.clone(),
+            tags: metadata.tags.clone(),
+            entities: metadata.entities.clone(),
+        })
+        .collect();
+
+    Json(WorkspacesResponse { workspaces })
+}
+
 /// Export query results to CSV or JSON format
 ///
 /// This endpoint executes SQL and returns results as a downloadable file.
@@ -265,6 +320,9 @@ enum AppError {
     UnexpectedState(String),
     NotImplemented(String),
     ExecutionFailed(String),
+    InvalidWorkspace(String),
+    WorkspaceClassification(String),
+    WorkspaceLoad(String),
 }
 
 impl IntoResponse for AppError {
@@ -275,6 +333,9 @@ impl IntoResponse for AppError {
             AppError::UnexpectedState(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::NotImplemented(msg) => (StatusCode::NOT_IMPLEMENTED, msg),
             AppError::ExecutionFailed(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::InvalidWorkspace(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::WorkspaceClassification(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            AppError::WorkspaceLoad(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
 
         let error = ErrorResponse::new(message);
@@ -290,11 +351,28 @@ async fn main() {
     // Initialize session store
     let session_store = SessionStore::with_default_timeout();
 
-    // Load schema registry
-    let registry = Arc::new(
-        SchemaRegistry::load("config/workspaces/campaigns_offers.index.json")
-            .expect("Failed to load schema registry"),
+    // Load workspace registry
+    let workspace_registry = Arc::new(
+        WorkspaceRegistry::from_directory("config/workspaces")
+            .expect("Failed to load workspace registry"),
     );
+
+    tracing::info!(
+        "Loaded {} workspaces: {}",
+        workspace_registry.list_workspaces().len(),
+        workspace_registry.list_workspaces().join(", ")
+    );
+
+    // Create IntentAgent for workspace classification
+    let llm_client = OpenAIClient::from_env()
+        .ok()
+        .map(|c| Box::new(c) as Box<dyn querygpt_core::planner::llm::LlmClient>);
+    let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4".to_string());
+    let intent_agent = Arc::new(IntentAgent::new(
+        (*workspace_registry).clone(),
+        llm_client,
+        model,
+    ));
 
     // Initialize database pool (optional - only if DATABASE_URL is configured)
     let db_pool = match DbPool::from_env() {
@@ -313,7 +391,8 @@ async fn main() {
 
     let state = AppState {
         session_store,
-        registry,
+        workspace_registry,
+        intent_agent,
         db_pool: db_pool.clone(),
     };
 
@@ -335,6 +414,7 @@ async fn main() {
         .route("/execute", post(execute))
         .route("/export", post(export))
         .route("/confirm", post(confirm))
+        .route("/workspaces", get(list_workspaces))
         .layer(cors)
         .with_state(state);
 
