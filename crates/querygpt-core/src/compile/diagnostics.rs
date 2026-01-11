@@ -80,6 +80,12 @@ pub struct CompilerDiagnostics {
     pub warnings: Vec<Diagnostic>,
 }
 
+impl Default for CompilerDiagnostics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompilerDiagnostics {
     pub fn new() -> Self {
         Self {

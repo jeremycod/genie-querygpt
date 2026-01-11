@@ -313,6 +313,7 @@ impl Planner for LlmPlanner {
         );
         let current_date = ctx.current_date.as_deref().unwrap_or("YYYY-MM-DD");
         // Build revision prompt with diagnostic context
+        let diagnostics_str = format!("{:?}", diagnostics);
         let system_prompt = format!(
             r#"You are a ReportSpec generator. The previous attempt failed compilation.
 
@@ -402,7 +403,7 @@ ALWAYS expand them to the full list of country codes shown above.
 IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
             current_date,
             current_date,
-            format!("{:?}", diagnostics),
+            diagnostics_str,
             current_date,
             current_date,
             current_date,

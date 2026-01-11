@@ -1,12 +1,13 @@
 ---
 source: crates/querygpt-core/tests/pipeline_sql_snapshots.rs
+assertion_line: 46
 expression: sql
 ---
 SELECT p.id,
        c.id AS campaign_id,
        c.name AS campaign_name,
-       o.id,
-       o.name,
+       o.id AS offer_id,
+       o.name AS offer_name,
        CASE WHEN o.end_date::date < CURRENT_DATE THEN 'EXPIRED' ELSE o.status END,
        o.status,
        o.attributes -> 'countries' AS countries,

@@ -140,7 +140,7 @@ fn order_joins(plan: &IntermediatePlan, root: &str) -> Result<Vec<PlanJoin>> {
             .chain(ready.iter().map(|j| j.right_alias.clone()))
             .collect();
 
-        let acc2: Vec<PlanJoin> = acc.into_iter().chain(ready.into_iter()).collect();
+        let acc2: Vec<PlanJoin> = acc.into_iter().chain(ready).collect();
 
         step(visited2, not_ready, acc2)
     }

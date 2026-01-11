@@ -1,3 +1,6 @@
+// Used in orchestration_comprehensive_tests.rs
+#![allow(dead_code)]
+
 use querygpt_core::compile::diagnostics::CompilerDiagnostics;
 use querygpt_core::dsl::report_spec::ReportSpec;
 use querygpt_core::planner::planner::{Planner, PlannerContext, PlannerResult, ReportSpecDraft};

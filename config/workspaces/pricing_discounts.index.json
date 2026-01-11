@@ -1,0 +1,19 @@
+{
+  "workspace": "pricing_discounts",
+  "description": "Pricing and discount analysis workspace for products, prices, and discount management",
+  "schema_cards_path": "config/workspaces/pricing_discounts.schema_cards.json",
+  "exemplar_sql_dir": "config/workspaces/pricing_discounts/exemplars",
+  "tags": [
+    "pricing",
+    "discounts",
+    "revenue",
+    "products",
+    "currency"
+  ],
+  "entities": [
+    "products_latest",
+    "prices",
+    "discounts_latest",
+    "offers_latest"
+  ]
+}

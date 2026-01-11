@@ -4,6 +4,9 @@ use crate::dsl::report_spec::ReportSpec;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Type alias for compiler function to reduce complexity
+pub type CompilerFn<'a, T> = Box<dyn Fn(&ReportSpec) -> Result<T> + 'a>;
+
 /// Captures the planner-facing state for turning a prompt into a runnable spec.
 ///
 /// The session keeps the original user prompt, the latest LLM-suggested spec,
@@ -16,7 +19,7 @@ pub struct PlannerSession<'a, T> {
     suggested_spec: ReportSpec,
     compiler_result: T,
     diff: SpecDiff,
-    compiler: Box<dyn Fn(&ReportSpec) -> Result<T> + 'a>,
+    compiler: CompilerFn<'a, T>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

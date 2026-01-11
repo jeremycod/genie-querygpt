@@ -1,0 +1,19 @@
+{
+  "workspace": "distribution",
+  "description": "Distribution and partner analysis workspace for SKUs, partners, and channel distribution",
+  "schema_cards_path": "config/workspaces/distribution.schema_cards.json",
+  "exemplar_sql_dir": "config/workspaces/distribution/exemplars",
+  "tags": [
+    "distribution",
+    "partners",
+    "skus",
+    "channels",
+    "platforms"
+  ],
+  "entities": [
+    "skus_latest",
+    "partners",
+    "campaigns_latest",
+    "offers_latest"
+  ]
+}

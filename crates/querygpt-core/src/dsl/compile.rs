@@ -238,11 +238,6 @@ pub fn translate_ordering(
         .collect()
 }
 
-/// Translate the select list into SQL projections.
-/// Each entry becomes a PlanProjection containing:
-///   - field: the original report field name
-///   - expression: the SQL expression with table aliases
-///   - alias: an optional alias provided in the ReportSpec
 /// Helper to check if a field is used with overlaps operator (multi-value array)
 fn is_multivalue_array_field(field: &str, spec: &ReportSpec) -> bool {
     spec.filters
@@ -250,6 +245,11 @@ fn is_multivalue_array_field(field: &str, spec: &ReportSpec) -> bool {
         .any(|f| f.field == field && matches!(f.op, FilterOp::Overlaps))
 }
 
+/// Translate the select list into SQL projections.
+/// Each entry becomes a PlanProjection containing:
+///   - field: the original report field name
+///   - expression: the SQL expression with table aliases
+///   - alias: an optional alias provided in the ReportSpec
 pub fn translate_projections(
     select: &[SelectItem],
     alias_map: &HashMap<String, String>,
