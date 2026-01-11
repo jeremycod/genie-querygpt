@@ -502,7 +502,7 @@
     {
       "name": "offer_products",
       "kind": "table",
-      "description": "Bridge between offer version and product ids.",
+      "description": "Bridge between offer version and product ids. Links offers to products and optionally to specific prices.",
       "primary_key": [
         "offer_id",
         "profile",
@@ -536,6 +536,41 @@
           "data_type": "varchar",
           "nullable": false,
           "description": "Product id",
+          "pii": false
+        },
+        {
+          "name": "price_id",
+          "data_type": "varchar",
+          "nullable": true,
+          "description": "Price id for this product in this offer (optional)",
+          "pii": false
+        },
+        {
+          "name": "reference_offer",
+          "data_type": "varchar",
+          "nullable": true,
+          "description": "Reference to another offer",
+          "pii": false
+        },
+        {
+          "name": "phase_id",
+          "data_type": "varchar",
+          "nullable": true,
+          "description": "Phase id this product belongs to",
+          "pii": false
+        },
+        {
+          "name": "legacy",
+          "data_type": "varchar",
+          "nullable": true,
+          "description": "Legacy data",
+          "pii": false
+        },
+        {
+          "name": "skus",
+          "data_type": "varchar",
+          "nullable": true,
+          "description": "Associated SKU information",
           "pii": false
         }
       ],
@@ -607,6 +642,71 @@
       ]
     },
     {
+      "name": "prices",
+      "kind": "table",
+      "description": "Prices for products. Each product can have multiple prices (different currencies, regions, etc.).",
+      "primary_key": [
+        "id",
+        "profile"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Price identifier",
+          "pii": false
+        },
+        {
+          "name": "amount",
+          "data_type": "integer",
+          "nullable": false,
+          "description": "Price amount in minor currency units (e.g., cents)",
+          "pii": false
+        },
+        {
+          "name": "currency",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Currency code (e.g., USD, EUR)",
+          "pii": false
+        },
+        {
+          "name": "product_id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Product this price belongs to",
+          "pii": false
+        },
+        {
+          "name": "active",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Whether this price is currently active",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [
+        {
+          "name": "active_prices",
+          "sql": "active = true",
+          "description": "Filter for active prices only"
+        }
+      ],
+      "tags": [
+        "prices",
+        "dimension"
+      ]
+    },
+    {
       "name": "partners",
       "kind": "table",
       "description": "Partners/partnerships.",
@@ -660,7 +760,8 @@
       "campaign_offers",
       "campaigns_latest",
       "partners",
-      "products_latest"
+      "products_latest",
+      "prices"
     ],
     "edges": [
       {
@@ -746,6 +847,20 @@
         "safe": true,
         "notes": [
           "Join product head by id/profile; product version is independent"
+        ]
+      },
+      {
+        "from": "offer_products",
+        "to": "prices",
+        "join_type": "left",
+        "on": [
+          "prices.id = offer_products.price_id",
+          "prices.profile = offer_products.profile"
+        ],
+        "cardinality": "n:1",
+        "safe": true,
+        "notes": [
+          "Join prices by price_id; price_id is nullable so use LEFT join"
         ]
       }
     ]

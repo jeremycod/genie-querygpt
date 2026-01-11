@@ -55,6 +55,8 @@ pub enum FilterOp {
     Gte,
     Lt,
     Lte,
+    IsNull,
+    IsNotNull,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

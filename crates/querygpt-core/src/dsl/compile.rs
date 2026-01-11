@@ -136,6 +136,17 @@ fn field_to_sql_expr(
         "workflow_status" => alias_map
             .get("offers_latest")
             .map(|a| format!("{}.status", a)),
+        "product_id" => alias_map
+            .get("offer_products")
+            .map(|a| format!("{}.product_id", a)),
+        "product_name" => alias_map
+            .get("products_latest")
+            .map(|a| format!("{}.name", a)),
+        "price_id" => alias_map
+            .get("offer_products")
+            .map(|a| format!("{}.price_id", a)),
+        "price_amount" | "amount" => alias_map.get("prices").map(|a| format!("{}.amount", a)),
+        "currency" => alias_map.get("prices").map(|a| format!("{}.currency", a)),
         "promo_type" => Some("promo_type".to_string()), // Special: resolved in filter translation
         _ => None,
     };
@@ -284,8 +295,14 @@ pub fn translate_projections(
             let alias = if item.alias.is_none() {
                 // Generate human-readable aliases based on field names (using snake_case)
                 match item.field.as_str() {
+                    // Explicit semantic field names - keep as-is (already disambiguated)
+                    "offer_id" | "offer_name" | "product_id" | "product_name" | "price_id"
+                    | "price_amount" | "campaign_id" | "campaign_name" => Some(item.field.clone()),
+                    // Field aliases that need explicit naming
+                    "amount" => Some("price_amount".to_string()),
+                    "currency" => Some("currency".to_string()),
                     // Campaign fields already have campaign_ prefix, keep as-is
-                    "campaign_id" | "campaign_name" | "campaign_startDate" | "campaign_endDate" => {
+                    "campaign_startDate" | "campaign_endDate" => {
                         // Convert to snake_case: campaign_startDate -> campaign_start_date
                         let snake = item
                             .field
@@ -585,6 +602,14 @@ fn translate_filter(
                 Ok(format!("{} {} {}", lhs, op_str, rhs))
             }
         }
+        FilterOp::IsNull => {
+            // Check if value is NULL
+            Ok(format!("{} IS NULL", column_sql))
+        }
+        FilterOp::IsNotNull => {
+            // Check if value is NOT NULL
+            Ok(format!("{} IS NOT NULL", column_sql))
+        }
     }
 }
 
@@ -612,6 +637,12 @@ fn resolve_entity<'a>(field: &str, cards: &'a SchemaCards) -> Option<&'a str> {
         "offer_id" | "offer_name" | "workflow_status" | "countries" | "package_id" => {
             return Some("offers_latest")
         }
+        // product-level fields (product_id exists in offer_products bridge table)
+        "product_id" => return Some("offer_products"),
+        "product_name" => return Some("products_latest"),
+        // price-level fields
+        "price_id" => return Some("offer_products"), // FK in offer_products, not prices.id
+        "price_amount" | "amount" | "currency" => return Some("prices"),
         // derived fields that live on offers_latest
         "expired_or_live_status" => return Some("offers_latest"),
         // derived aggregation that comes from offer_products
@@ -821,6 +852,8 @@ fn compile_report_spec_internal(
                     "offer_products" => "opr",
                     "offer_phases" => "oph",
                     "partners" => "p",
+                    "products_latest" => "pl",
+                    "prices" => "pr",
                     other => other,
                 };
                 PlanTable {

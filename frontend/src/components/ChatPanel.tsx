@@ -61,16 +61,16 @@ export function ChatPanel({ messages, isLoading, onSubmit }: ChatPanelProps) {
                 Example queries:
               </p>
               <button
-                onClick={() => setInput('show all active campaigns')}
+                onClick={() => setInput('Export all live ESPN offers with start date in 2025. For each offer export offer id, offer name, offer start date, campaign id, campaign name')}
                 className="block w-full text-left px-4 py-2 text-sm text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                Show all active campaigns
+                  Export all live ESPN offers with start date in 2025. For each offer export offer id, offer name, offer start date, campaign id, campaign name
               </button>
               <button
-                onClick={() => setInput('count campaigns by region')}
+                onClick={() => setInput('Find all retail offers in South Korea and Taiwan which have a price defined and show the prices for each product. Show offer id, offer name, product id, product name, price amount, currency. Show offer id, offer name, product id, product name, price amount, currency')}
                 className="block w-full text-left px-4 py-2 text-sm text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                Count campaigns by region
+                  Find all retail offers in South Korea and Taiwan which have a price defined and show the prices for each product. Show offer id, offer name, product id, product name, price amount, currency. Show offer id, offer name, product id, product name, price amount, currency
               </button>
               <button
                 onClick={() => setInput('show offers with high CTR')}
