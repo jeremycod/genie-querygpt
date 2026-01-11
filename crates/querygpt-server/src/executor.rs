@@ -226,21 +226,8 @@ impl SqlExecutor {
         idx: usize,
         col_type: &Type,
     ) -> Result<serde_json::Value, ExecutionError> {
-        // Handle NULL
-        if row
-            .try_get::<_, Option<String>>(idx)
-            .unwrap_or(None)
-            .is_none()
-            && *col_type != Type::BOOL
-        {
-            // Special handling for bool to avoid false positives
-            if let Ok(None) = row.try_get::<_, Option<bool>>(idx) {
-                return Ok(serde_json::Value::Null);
-            }
-            return Ok(serde_json::Value::Null);
-        }
-
         // Convert based on PostgreSQL type
+        // Each type handler properly deals with NULL values using Option<T>
         let json_value = match *col_type {
             Type::BOOL => row
                 .try_get::<_, Option<bool>>(idx)

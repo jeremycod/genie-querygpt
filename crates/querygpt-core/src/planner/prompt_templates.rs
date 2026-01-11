@@ -74,7 +74,7 @@ CRITICAL RULES (YOU MUST FOLLOW THESE):
 6. NEVER use SQL-qualified names (❌ WRONG: "o.id", "c.brand" ✅ CORRECT: "id", "brand")
 
 ⚠️  FORMAT CORRECTNESS:
-5. Use lowercase for "op" values: "eq", "in", "overlaps", "gt", "gte", "lt", "lte"
+5. Use lowercase for "op" values: "eq", "in", "overlaps", "gt", "gte", "lt", "lte", "is_null", "is_not_null"
 6. Use lowercase for "dir" values: "asc", "desc"
 7. "filters" and "order_by" can be empty arrays [] if not needed
 8. Only output valid JSON - no explanations outside the JSON structure
@@ -95,10 +95,13 @@ FILTER OPERATORS (lowercase only):
 - "gte": Greater than or equal (for dates, numbers)
 - "lt": Less than (for dates, numbers)
 - "lte": Less than or equal (for dates, numbers)
+- "is_null": Check if field is NULL (no value needed)
+- "is_not_null": Check if field is NOT NULL (no value needed)
 
 NULL CHECKS:
-- To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
-- NEVER use "isnull" or "is_null" as operators - use "eq" with null value
+- To check if field IS NULL: {{"field": "fieldName", "op": "is_null", "value": null}}
+- To check if field IS NOT NULL: {{"field": "fieldName", "op": "is_not_null", "value": null}}
+- Alternative: use "eq" with null value for NULL checks
 
 DATE HANDLING (CRITICAL - READ THE CURRENT DATE AT THE TOP OF THIS PROMPT):
 ⚠️  "TODAY" or "NOW" QUERIES - USE THE CURRENT DATE SHOWN AT THE TOP:
@@ -154,12 +157,25 @@ IMPORTANT: Always use ISO 3166-1 alpha-2 country codes:
 - Use "US" for United States (NOT "USA")
 - Never use region names as literal values in filters
 
+DISAMBIGUATING NAME FIELDS (CRITICAL):
+⚠️  Multiple entities have a "name" field - ALWAYS use explicit names:
+- For offer name: use "offer_name" (NOT just "name")
+- For product name: use "product_name" (NOT just "name")
+- For campaign name: use "campaign_name"
+- NEVER use bare "name" field when products or campaigns are involved
+
+Examples:
+- "Show offer name and product name" →
+  {{"field": "offer_name"}}, {{"field": "product_name"}}
+- "List offer id, offer name, product id, product name" →
+  {{"field": "offer_id"}}, {{"field": "offer_name"}}, {{"field": "product_id"}}, {{"field": "product_name"}}
+
 CAMPAIGN vs OFFER FIELDS:
 When users ask for both campaign and offer data:
 - Campaign fields use "campaign_" prefix: "campaign_id", "campaign_name", "campaign_startDate", "campaign_endDate"
-- Offer fields have no prefix: "id", "name", "startDate", "endDate"
+- Offer fields can use explicit prefix: "offer_id", "offer_name" OR no prefix: "id" (when no ambiguity)
 - Example: "Campaign ID and name, offer id and name" →
-  {{"field": "campaign_id"}}, {{"field": "campaign_name"}}, {{"field": "id"}}, {{"field": "name"}}
+  {{"field": "campaign_id"}}, {{"field": "campaign_name"}}, {{"field": "offer_id"}}, {{"field": "offer_name"}}
 
 BRAND FILTERING (ESPN, DISNEY, STAR, HULU):
 When users ask for offers by brand (ESPN, DISNEY, STAR, HULU):
@@ -169,7 +185,28 @@ When users ask for offers by brand (ESPN, DISNEY, STAR, HULU):
 - Common brand values: "ESPN", "DISNEY", "STAR", "HULU"
 - The system will automatically handle joins between campaigns and offers
 - Example: "ESPN offers" → {{"field": "brand", "op": "eq", "value": "espn"}}
-- Example: "disney or hulu" → {{"field": "brand", "op": "in", "value": ["disney", "hulu"]}}"#,
+- Example: "disney or hulu" → {{"field": "brand", "op": "in", "value": ["disney", "hulu"]}}
+
+PRICE TYPE FILTERING (RETAIL, etc.):
+⚠️  CRITICAL: When users mention "retail offers" or "retail pricing":
+- "retail" refers to the "priceType" field, NOT a generic description
+- Use the "priceType" field with value "RETAIL": {{"field": "priceType", "op": "eq", "value": "RETAIL"}}
+- Common priceType values: "RETAIL" (most common)
+- Example: "retail offers" → {{"field": "priceType", "op": "eq", "value": "RETAIL"}}
+- Example: "Find retail offers in South Korea" → filters include {{"field": "priceType", "op": "eq", "value": "RETAIL"}}
+- DO NOT confuse with other uses of "retail" in the user query
+- The priceType field is in offers_latest.attributes
+
+CHECKING IF PRICE IS DEFINED:
+⚠️  CRITICAL: When users ask for offers "where price is defined" or "with prices":
+- Check if the offer has a price_id: {{"field": "price_id", "op": "is_not_null", "value": null}}
+- DO NOT check if "amount" is not null - that checks the prices table, not the offer
+- "price is defined on offer" = offer_products.price_id IS NOT NULL
+- "price is not defined" = offer_products.price_id IS NULL
+- Examples:
+  - "offers where price is defined" → {{"field": "price_id", "op": "is_not_null", "value": null}}
+  - "offers with prices" → {{"field": "price_id", "op": "is_not_null", "value": null}}
+  - "offers without prices" → {{"field": "price_id", "op": "is_null", "value": null}}"#,
             current_date,
             current_date,
             constraints_info,
@@ -233,7 +270,7 @@ CRITICAL RULES (YOU MUST FOLLOW THESE):
 6. NEVER use SQL-qualified names (❌ WRONG: "o.id", "c.brand" ✅ CORRECT: "id", "brand")
 
 ⚠️  FORMAT CORRECTNESS:
-5. Use lowercase for "op" values: "eq", "in", "overlaps", "gt", "gte", "lt", "lte"
+5. Use lowercase for "op" values: "eq", "in", "overlaps", "gt", "gte", "lt", "lte", "is_null", "is_not_null"
 6. Use lowercase for "dir" values: "asc", "desc"
 7. "filters" and "order_by" can be empty arrays [] if not needed
 8. Only output valid JSON - no explanations outside the JSON structure
@@ -254,10 +291,13 @@ FILTER OPERATORS (lowercase only):
 - "gte": Greater than or equal (for dates, numbers)
 - "lt": Less than (for dates, numbers)
 - "lte": Less than or equal (for dates, numbers)
+- "is_null": Check if field is NULL (no value needed)
+- "is_not_null": Check if field is NOT NULL (no value needed)
 
 NULL CHECKS:
-- To check if field IS NULL: {{"field": "fieldName", "op": "eq", "value": null}}
-- NEVER use "isnull" or "is_null" as operators - use "eq" with null value
+- To check if field IS NULL: {{"field": "fieldName", "op": "is_null", "value": null}}
+- To check if field IS NOT NULL: {{"field": "fieldName", "op": "is_not_null", "value": null}}
+- Alternative: use "eq" with null value for NULL checks
 
 DATE HANDLING (CRITICAL - READ THE CURRENT DATE AT THE TOP OF THIS PROMPT):
 ⚠️  "TODAY" or "NOW" QUERIES - USE THE CURRENT DATE SHOWN AT THE TOP:
@@ -313,12 +353,25 @@ IMPORTANT: Always use ISO 3166-1 alpha-2 country codes:
 - Use "US" for United States (NOT "USA")
 - Never use region names as literal values in filters
 
+DISAMBIGUATING NAME FIELDS (CRITICAL):
+⚠️  Multiple entities have a "name" field - ALWAYS use explicit names:
+- For offer name: use "offer_name" (NOT just "name")
+- For product name: use "product_name" (NOT just "name")
+- For campaign name: use "campaign_name"
+- NEVER use bare "name" field when products or campaigns are involved
+
+Examples:
+- "Show offer name and product name" →
+  {{"field": "offer_name"}}, {{"field": "product_name"}}
+- "List offer id, offer name, product id, product name" →
+  {{"field": "offer_id"}}, {{"field": "offer_name"}}, {{"field": "product_id"}}, {{"field": "product_name"}}
+
 CAMPAIGN vs OFFER FIELDS:
 When users ask for both campaign and offer data:
 - Campaign fields use "campaign_" prefix: "campaign_id", "campaign_name", "campaign_startDate", "campaign_endDate"
-- Offer fields have no prefix: "id", "name", "startDate", "endDate"
+- Offer fields can use explicit prefix: "offer_id", "offer_name" OR no prefix: "id" (when no ambiguity)
 - Example: "Campaign ID and name, offer id and name" →
-  {{"field": "campaign_id"}}, {{"field": "campaign_name"}}, {{"field": "id"}}, {{"field": "name"}}
+  {{"field": "campaign_id"}}, {{"field": "campaign_name"}}, {{"field": "offer_id"}}, {{"field": "offer_name"}}
 
 BRAND FILTERING (ESPN, DISNEY, STAR, HULU):
 When users ask for offers by brand (ESPN, DISNEY, STAR, HULU):
@@ -329,6 +382,27 @@ When users ask for offers by brand (ESPN, DISNEY, STAR, HULU):
 - The system will automatically handle joins between campaigns and offers
 - Example: "ESPN offers" → {{"field": "brand", "op": "eq", "value": "espn"}}
 - Example: "disney or hulu" → {{"field": "brand", "op": "in", "value": ["disney", "hulu"]}}
+
+PRICE TYPE FILTERING (RETAIL, etc.):
+⚠️  CRITICAL: When users mention "retail offers" or "retail pricing":
+- "retail" refers to the "priceType" field, NOT a generic description
+- Use the "priceType" field with value "RETAIL": {{"field": "priceType", "op": "eq", "value": "RETAIL"}}
+- Common priceType values: "RETAIL" (most common)
+- Example: "retail offers" → {{"field": "priceType", "op": "eq", "value": "RETAIL"}}
+- Example: "Find retail offers in South Korea" → filters include {{"field": "priceType", "op": "eq", "value": "RETAIL"}}
+- DO NOT confuse with other uses of "retail" in the user query
+- The priceType field is in offers_latest.attributes
+
+CHECKING IF PRICE IS DEFINED:
+⚠️  CRITICAL: When users ask for offers "where price is defined" or "with prices":
+- Check if the offer has a price_id: {{"field": "price_id", "op": "is_not_null", "value": null}}
+- DO NOT check if "amount" is not null - that checks the prices table, not the offer
+- "price is defined on offer" = offer_products.price_id IS NOT NULL
+- "price is not defined" = offer_products.price_id IS NULL
+- Examples:
+  - "offers where price is defined" → {{"field": "price_id", "op": "is_not_null", "value": null}}
+  - "offers with prices" → {{"field": "price_id", "op": "is_not_null", "value": null}}
+  - "offers without prices" → {{"field": "price_id", "op": "is_null", "value": null}}
 
 IMPORTANT: Fix the errors and output only valid JSON. No explanations outside the JSON structure."#,
             current_date,
