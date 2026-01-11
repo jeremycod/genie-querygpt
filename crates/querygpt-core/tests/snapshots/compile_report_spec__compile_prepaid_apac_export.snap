@@ -1,5 +1,6 @@
 ---
 source: crates/querygpt-core/tests/compile_report_spec.rs
+assertion_line: 28
 expression: plan
 ---
 {
@@ -182,12 +183,12 @@ expression: plan
     {
       "field": "offer_id",
       "expression": "o.id",
-      "alias": null
+      "alias": "offer_id"
     },
     {
       "field": "offer_name",
       "expression": "o.name",
-      "alias": null
+      "alias": "offer_name"
     },
     {
       "field": "expired_or_live_status",

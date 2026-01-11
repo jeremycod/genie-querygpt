@@ -1,3 +1,6 @@
+// Shared test utilities
+#![allow(dead_code)]
+
 use querygpt_core::dsl::report_spec::ReportSpec;
 use querygpt_core::schema::registry::SchemaRegistry;
 use std::fs;
@@ -17,7 +20,7 @@ pub fn load_schema_registry(name: &str) -> SchemaRegistry {
         .expect("resolve repo root from CARGO_MANIFEST_DIR");
 
     let original_dir = std::env::current_dir().unwrap();
-    std::env::set_current_dir(&repo_root).expect("change to repo root");
+    std::env::set_current_dir(repo_root).expect("change to repo root");
 
     let path = format!("config/workspaces/{}", name);
     let result = SchemaRegistry::load(&path).expect("load schema registry");

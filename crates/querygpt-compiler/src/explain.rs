@@ -55,7 +55,7 @@ pub fn explain_pagination(plan: &IntermediatePlan) -> String {
 }
 
 pub fn explain_plan(plan: &IntermediatePlan) -> String {
-    vec![
+    [
         explain_joins(plan),
         explain_filters(plan),
         explain_pagination(plan),
@@ -91,7 +91,7 @@ fn describe_join(join: &PlanJoin, table_names: &HashMap<&str, &str>) -> String {
     format!("{join_type} join {left} to {right} on {conditions}")
 }
 
-fn describe_table_alias<'a>(alias: &str, table_names: &'a HashMap<&str, &str>) -> String {
+fn describe_table_alias(alias: &str, table_names: &HashMap<&str, &str>) -> String {
     if let Some(table_name) = table_names.get(alias) {
         format!("{table_name} ({alias})")
     } else {
