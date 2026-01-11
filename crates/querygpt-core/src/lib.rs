@@ -1,7 +1,10 @@
 pub mod agents;
 pub mod compile;
+pub mod context;
 pub mod dsl;
+pub mod examples;
 pub mod explain;
+pub mod fixtures;
 pub mod planner;
 pub mod policy;
 pub mod rag;

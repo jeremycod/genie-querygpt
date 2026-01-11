@@ -49,9 +49,9 @@ async fn query(
     // Step 1: Classify intent to determine workspace
     let intent = intent::classify(&req.prompt);
 
-    // Step 2: Build planner context with schema summary and examples
+    // Step 2: Build planner context with schema summary and examples (using shared module)
     let schema_summary = SchemaSummary::from_registry(&state.registry);
-    let examples = build_example_queries();
+    let examples = querygpt_core::examples::build_example_queries();
 
     // Get current date for "today" queries
     let current_date = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -71,7 +71,8 @@ async fn query(
             .suggest_and_compile(&state.registry, &req.prompt, context)
             .await
     } else {
-        let planner = build_fixture_planner();
+        // Using shared fixtures module
+        let planner = querygpt_core::fixtures::build_fixture_planner();
         let orchestrator =
             Orchestrator::new(planner, confirmation).with_max_retries(req.max_attempts);
         orchestrator
@@ -254,125 +255,6 @@ async fn export(
     );
 
     Ok(response)
-}
-
-/// Build fixture planner with test cases
-fn build_fixture_planner() -> querygpt_core::planner::fixture_planner::FixturePlanner {
-    use querygpt_core::dsl::report_spec::{Filter, FilterOp, Mode, ReportSpec, SelectItem};
-    use querygpt_core::planner::fixture_planner::FixturePlanner;
-    use serde_json::json;
-
-    let mut planner = FixturePlanner::new();
-
-    // Fixture 1: Simple - show all campaigns
-    planner.add_fixture(
-        "show all campaigns".to_string(),
-        ReportSpec {
-            version: 1,
-            workspace: "campaigns_offers".to_string(),
-            select: vec![
-                SelectItem {
-                    field: "campaign_id".to_string(),
-                    alias: None,
-                },
-                SelectItem {
-                    field: "campaign_name".to_string(),
-                    alias: None,
-                },
-            ],
-            filters: vec![],
-            order_by: vec![],
-            mode: Mode::Preview,
-            pagination: None,
-        },
-    );
-
-    // Fixture 2: Active campaigns
-    planner.add_fixture(
-        "show active campaigns".to_string(),
-        ReportSpec {
-            version: 1,
-            workspace: "campaigns_offers".to_string(),
-            select: vec![
-                SelectItem {
-                    field: "campaign_id".to_string(),
-                    alias: None,
-                },
-                SelectItem {
-                    field: "campaign_name".to_string(),
-                    alias: None,
-                },
-            ],
-            filters: vec![Filter {
-                field: "campaign_deleted".to_string(),
-                op: FilterOp::Eq,
-                value: json!(false),
-            }],
-            order_by: vec![],
-            mode: Mode::Preview,
-            pagination: None,
-        },
-    );
-
-    planner
-}
-
-/// Build example queries to guide the LLM
-fn build_example_queries() -> Vec<querygpt_core::planner::schema_summary::ExamplePair> {
-    use querygpt_core::dsl::report_spec::{Filter, FilterOp, Mode, ReportSpec, SelectItem};
-    use querygpt_core::planner::schema_summary::ExamplePair;
-    use serde_json::json;
-
-    vec![
-        ExamplePair {
-            prompt: "show all offers".to_string(),
-            spec: ReportSpec {
-                version: 1,
-                workspace: "campaigns_offers".to_string(),
-                select: vec![
-                    SelectItem {
-                        field: "offer_id".to_string(),
-                        alias: None,
-                    },
-                    SelectItem {
-                        field: "offer_name".to_string(),
-                        alias: None,
-                    },
-                ],
-                filters: vec![],
-                order_by: vec![],
-                mode: Mode::Preview,
-                pagination: None,
-            },
-            description: "Basic query for all offers".to_string(),
-        },
-        ExamplePair {
-            prompt: "show active offers".to_string(),
-            spec: ReportSpec {
-                version: 1,
-                workspace: "campaigns_offers".to_string(),
-                select: vec![
-                    SelectItem {
-                        field: "offer_id".to_string(),
-                        alias: None,
-                    },
-                    SelectItem {
-                        field: "offer_name".to_string(),
-                        alias: None,
-                    },
-                ],
-                filters: vec![Filter {
-                    field: "offer_deleted".to_string(),
-                    op: FilterOp::Eq,
-                    value: json!(false),
-                }],
-                order_by: vec![],
-                mode: Mode::Preview,
-                pagination: None,
-            },
-            description: "Filter for active (not deleted) offers using boolean field".to_string(),
-        },
-    ]
 }
 
 /// Application errors
