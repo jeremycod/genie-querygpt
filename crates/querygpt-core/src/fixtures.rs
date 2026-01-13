@@ -24,6 +24,7 @@ pub fn build_fixture_planner() -> FixturePlanner {
         ReportSpec {
             version: 1,
             workspace: "campaigns_offers".to_string(),
+            primary_entity: None,
             select: vec![
                 SelectItem {
                     field: "campaign_id".to_string(),
@@ -47,6 +48,7 @@ pub fn build_fixture_planner() -> FixturePlanner {
         ReportSpec {
             version: 1,
             workspace: "campaigns_offers".to_string(),
+            primary_entity: None,
             select: vec![
                 SelectItem {
                     field: "offer_id".to_string(),
@@ -70,6 +72,7 @@ pub fn build_fixture_planner() -> FixturePlanner {
         ReportSpec {
             version: 1,
             workspace: "campaigns_offers".to_string(),
+            primary_entity: None,
             select: vec![
                 SelectItem {
                     field: "campaign_id".to_string(),
@@ -97,6 +100,7 @@ pub fn build_fixture_planner() -> FixturePlanner {
         ReportSpec {
             version: 1,
             workspace: "campaigns_offers".to_string(),
+            primary_entity: None,
             select: vec![
                 SelectItem {
                     field: "campaign_id".to_string(),
@@ -123,6 +127,7 @@ pub fn build_fixture_planner() -> FixturePlanner {
         ReportSpec {
             version: 1,
             workspace: "campaigns_offers".to_string(),
+            primary_entity: None,
             select: vec![
                 SelectItem {
                     field: "offer_id".to_string(),

@@ -8,6 +8,7 @@ fn snapshot_diff_no_changes() {
     let spec = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -29,6 +30,7 @@ fn snapshot_diff_added_fields() {
     let original = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -42,6 +44,7 @@ fn snapshot_diff_added_fields() {
     let revised = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![
             SelectItem {
                 field: "campaign_id".to_string(),
@@ -69,6 +72,7 @@ fn snapshot_diff_added_filters() {
     let original = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -82,6 +86,7 @@ fn snapshot_diff_added_filters() {
     let revised = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -107,6 +112,7 @@ fn snapshot_diff_mode_change() {
     let original = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -120,6 +126,7 @@ fn snapshot_diff_mode_change() {
     let revised = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -141,6 +148,7 @@ fn snapshot_diff_complex_changes() {
     let original = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![
             SelectItem {
                 field: "campaign_id".to_string(),
@@ -164,6 +172,7 @@ fn snapshot_diff_complex_changes() {
     let revised = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![
             SelectItem {
                 field: "campaign_id".to_string(),

@@ -13,6 +13,7 @@ async fn fixture_planner_returns_configured_spec() {
     let test_spec = ReportSpec {
         version: 1,
         workspace: "test".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "offer_id".to_string(),
             alias: None,

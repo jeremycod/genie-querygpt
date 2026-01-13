@@ -626,7 +626,30 @@ pub fn translate_filters(
         .collect()
 }
 
-fn resolve_entity<'a>(field: &str, cards: &'a SchemaCards) -> Option<&'a str> {
+fn resolve_entity<'a>(
+    field: &str,
+    cards: &'a SchemaCards,
+    primary_entity: Option<&str>,
+) -> Option<&'a str> {
+    // 0. If primary_entity is specified and the field exists in that entity, prefer it
+    // This solves ambiguity when the same field exists in multiple tables
+    if let Some(primary) = primary_entity {
+        // Check if field exists in primary entity's columns
+        if let Some(entity) = cards.entities.iter().find(|e| e.name == primary) {
+            if entity.columns.iter().any(|col| col.name == field) {
+                return Some(entity.name.as_str());
+            }
+            // Check json_paths in primary entity
+            let field_camel = to_camel_case(field);
+            for json_path in &entity.json_paths {
+                let path_field = json_path.path.trim_start_matches("$.");
+                if path_field == field || path_field == field_camel {
+                    return Some(entity.name.as_str());
+                }
+            }
+        }
+    }
+
     // 1. Hard-coded mapping for the campaigns_offers workspace
     match field {
         // partner-level field
@@ -806,20 +829,23 @@ fn compile_report_spec_internal(
 
     let schema_cards = &reg.cards;
 
+    // Extract primary_entity from spec (if specified)
+    let primary_entity = spec.primary_entity.as_deref();
+
     let select_entities = spec
         .select
         .iter()
-        .map(|s| resolve_entity(&s.field, schema_cards))
+        .map(|s| resolve_entity(&s.field, schema_cards, primary_entity))
         .collect::<Vec<_>>();
     let filter_entities = spec
         .filters
         .iter()
-        .map(|s| resolve_entity(&s.field, schema_cards))
+        .map(|s| resolve_entity(&s.field, schema_cards, primary_entity))
         .collect::<Vec<_>>();
     let order_by_entities = spec
         .order_by
         .iter()
-        .map(|s| resolve_entity(&s.field, schema_cards))
+        .map(|s| resolve_entity(&s.field, schema_cards, primary_entity))
         .collect::<Vec<_>>();
 
     let mut required_entities: Vec<_> = select_entities

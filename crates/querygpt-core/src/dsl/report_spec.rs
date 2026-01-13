@@ -5,6 +5,10 @@ use serde_json::Value;
 pub struct ReportSpec {
     pub version: u32,
     pub workspace: String,
+    /// Primary entity/table for this query (e.g., "offers_latest", "campaigns_latest", "products_latest")
+    /// This helps the compiler understand which table is the main focus when fields are ambiguous
+    #[serde(default)]
+    pub primary_entity: Option<String>,
     pub select: Vec<SelectItem>,
     #[serde(default)]
     pub filters: Vec<Filter>,

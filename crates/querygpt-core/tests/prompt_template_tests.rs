@@ -36,6 +36,7 @@ fn revision_prompt_includes_error_context() {
     let spec = ReportSpec {
         version: 1,
         workspace: "test".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "invalid_field".to_string(),
             alias: None,

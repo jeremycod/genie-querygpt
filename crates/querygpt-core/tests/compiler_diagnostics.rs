@@ -29,6 +29,7 @@ fn pagination_out_of_range_diagnostic() {
     let spec = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -53,6 +54,7 @@ fn schema_mismatch_diagnostic() {
     let spec = ReportSpec {
         version: 1,
         workspace: "another_workspace".to_string(),
+        primary_entity: None,
         select: vec![],
         filters: vec![],
         order_by: vec![],
@@ -149,6 +151,7 @@ fn invalid_join_diagnostic() {
     let spec = ReportSpec {
         version: 1,
         workspace: "demo".to_string(),
+        primary_entity: None,
         select: vec![
             SelectItem {
                 field: "left_id".to_string(),

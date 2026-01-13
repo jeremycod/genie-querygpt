@@ -77,7 +77,20 @@
           "pii": false
         }
       ],
-      "json_paths": [],
+      "json_paths": [
+        {
+          "column": "attributes",
+          "path": "$.countries",
+          "data_type": "array",
+          "description": "Countries where this product is available (ISO 3166-1 alpha-2 codes)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.category",
+          "data_type": "string",
+          "description": "Product category or type"
+        }
+      ],
       "common_filters": [
         {
           "name": "active_products",
@@ -284,12 +297,42 @@
           "pii": false
         }
       ],
-      "json_paths": [],
+      "json_paths": [
+        {
+          "column": "attributes",
+          "path": "$.countries",
+          "data_type": "array",
+          "description": "Countries where this offer is available (ISO 3166-1 alpha-2 codes, e.g., ['US', 'KR', 'TW'])"
+        },
+        {
+          "column": "attributes",
+          "path": "$.priceType",
+          "data_type": "string",
+          "description": "Type of pricing for this offer (e.g., RETAIL, WHOLESALE)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.startDate",
+          "data_type": "date",
+          "description": "Offer start date (when the offer becomes available)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.endDate",
+          "data_type": "date",
+          "description": "Offer end date (when the offer expires, null means unlimited)"
+        }
+      ],
       "common_filters": [
         {
           "name": "offers_with_discounts",
           "sql": "discount_id IS NOT NULL",
           "description": "Filter for offers that have discounts"
+        },
+        {
+          "name": "retail_offers",
+          "sql": "attributes::jsonb ->> 'priceType' = 'RETAIL'",
+          "description": "Filter for retail offers only"
         }
       ],
       "tags": [
