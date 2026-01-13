@@ -29,6 +29,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),
@@ -52,6 +53,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),
@@ -83,6 +85,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),
@@ -109,6 +112,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),
@@ -141,6 +145,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),
@@ -172,6 +177,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),
@@ -214,6 +220,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),
@@ -244,6 +251,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),
@@ -279,6 +287,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),
@@ -312,6 +321,7 @@ pub fn build_example_queries() -> Vec<ExamplePair> {
             spec: ReportSpec {
                 version: 1,
                 workspace: "campaigns_offers".to_string(),
+                primary_entity: None,
                 select: vec![
                     SelectItem {
                         field: "id".to_string(),

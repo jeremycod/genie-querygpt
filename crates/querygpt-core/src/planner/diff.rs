@@ -166,6 +166,7 @@ mod tests {
         let spec = ReportSpec {
             version: 1,
             workspace: "test".to_string(),
+            primary_entity: None,
             select: vec![SelectItem {
                 field: "field1".to_string(),
                 alias: None,
@@ -185,6 +186,7 @@ mod tests {
         let original = ReportSpec {
             version: 1,
             workspace: "test".to_string(),
+            primary_entity: None,
             select: vec![SelectItem {
                 field: "field1".to_string(),
                 alias: None,
@@ -198,6 +200,7 @@ mod tests {
         let revised = ReportSpec {
             version: 1,
             workspace: "test".to_string(),
+            primary_entity: None,
             select: vec![SelectItem {
                 field: "field2".to_string(),
                 alias: None,

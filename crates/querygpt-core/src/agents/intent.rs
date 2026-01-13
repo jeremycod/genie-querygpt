@@ -70,10 +70,30 @@ impl IntentAgent {
     fn keyword_classify(&self, prompt: &str) -> Option<WorkspaceClassification> {
         let prompt_lower = prompt.to_lowercase();
 
-        // Define keyword patterns for each workspace
-        let workspace_keywords: Vec<(&str, Vec<&str>)> = vec![
+        // Define keyword patterns with weights
+        // entity_keywords: Primary entities (campaigns, offers, products, skus) - HIGH priority
+        // attribute_keywords: Attributes/filters (price, discount, region) - MEDIUM priority
+        let workspace_patterns: Vec<(&str, Vec<&str>, Vec<&str>)> = vec![
+            (
+                "campaigns_offers",
+                vec!["campaign", "offer", "promo", "promotion", "phase"], // entities
+                vec!["export", "prepaid", "apac", "live", "active"],      // attributes
+            ),
+            (
+                "distribution",
+                vec!["sku", "partner", "channel"], // entities
+                vec![
+                    "distribution",
+                    "platform",
+                    "country",
+                    "region",
+                    "marketplace",
+                    "distributor",
+                ], // attributes
+            ),
             (
                 "pricing_discounts",
+                vec![], // no primary entities - this is a supporting workspace
                 vec![
                     "price",
                     "pricing",
@@ -88,63 +108,59 @@ impl IntentAgent {
                     "discount percentage",
                 ],
             ),
-            (
-                "distribution",
-                vec![
-                    "sku",
-                    "partner",
-                    "channel",
-                    "distribution",
-                    "platform",
-                    "country",
-                    "region",
-                    "marketplace",
-                    "distributor",
-                ],
-            ),
-            (
-                "campaigns_offers",
-                vec![
-                    "campaign",
-                    "offer",
-                    "promo",
-                    "promotion",
-                    "export",
-                    "prepaid",
-                    "apac",
-                    "phase",
-                    "offer product",
-                ],
-            ),
         ];
 
-        // Count keyword matches for each workspace
-        let mut best_match: Option<(&str, usize)> = None;
+        // Score each workspace based on weighted matches
+        let mut scored_matches: Vec<(&str, i32, String)> = Vec::new();
 
-        for (workspace, keywords) in &workspace_keywords {
-            let match_count = keywords
+        for (workspace, entity_keywords, attribute_keywords) in &workspace_patterns {
+            let entity_matches: Vec<String> = entity_keywords
                 .iter()
                 .filter(|keyword| prompt_lower.contains(*keyword))
-                .count();
+                .map(|s| s.to_string())
+                .collect();
 
-            if match_count > 0 {
-                if let Some((_, best_count)) = best_match {
-                    if match_count > best_count {
-                        best_match = Some((workspace, match_count));
-                    }
+            let attribute_matches: Vec<String> = attribute_keywords
+                .iter()
+                .filter(|keyword| prompt_lower.contains(*keyword))
+                .map(|s| s.to_string())
+                .collect();
+
+            // Weighted scoring:
+            // - Entity match (campaigns, offers, products, skus) = 10 points each
+            // - Attribute match (price, discount, region) = 1 point each
+            let entity_score = entity_matches.len() as i32 * 10;
+            let attribute_score = attribute_matches.len() as i32;
+            let total_score = entity_score + attribute_score;
+
+            if total_score > 0 {
+                let reason = if !entity_matches.is_empty() {
+                    format!(
+                        "Entity match: {} (score: {})",
+                        entity_matches.join(", "),
+                        total_score
+                    )
                 } else {
-                    best_match = Some((workspace, match_count));
-                }
+                    format!(
+                        "Attribute match: {} (score: {})",
+                        attribute_matches.join(", "),
+                        total_score
+                    )
+                };
+                scored_matches.push((workspace, total_score, reason));
             }
         }
 
-        // Only return keyword match if it's clear (at least 1 match and workspace exists)
-        if let Some((workspace, count)) = best_match {
-            if count >= 1 && self.registry.has_workspace(workspace) {
+        // Sort by score (highest first)
+        scored_matches.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Return the best match if it exists and workspace is valid
+        if let Some((workspace, score, reason)) = scored_matches.first() {
+            if *score > 0 && self.registry.has_workspace(workspace) {
                 return Some(WorkspaceClassification {
                     workspace: workspace.to_string(),
                     confidence: ClassificationConfidence::High,
-                    reason: format!("Keyword match ({} relevant terms)", count),
+                    reason: reason.clone(),
                 });
             }
         }

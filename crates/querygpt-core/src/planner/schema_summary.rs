@@ -121,7 +121,7 @@ impl SchemaSummary {
     /// Build a SchemaSummary from a SchemaRegistry
     pub fn from_registry(registry: &SchemaRegistry) -> Self {
         // Convert entities to table summaries
-        let tables = registry
+        let mut tables: Vec<TableSummary> = registry
             .cards
             .entities
             .iter()
@@ -158,6 +158,36 @@ impl SchemaSummary {
                     });
                 }
 
+                // RESILIENCE: Detect entities with JSONB columns but no json_paths defined
+                // This indicates incomplete schema cards that need to be updated
+                let has_jsonb_columns = entity
+                    .columns
+                    .iter()
+                    .any(|col| col.data_type.to_lowercase() == "jsonb");
+
+                if has_jsonb_columns && entity.json_paths.is_empty() {
+                    // Log warning for developers
+                    tracing::warn!(
+                        entity = %entity.name,
+                        "Entity has JSONB columns but no json_paths defined. \
+                        JSONB fields will not be queryable. \
+                        Update schema cards to add json_paths for attributes."
+                    );
+
+                    // Add a synthetic field to inform the LLM about this limitation
+                    fields.push(FieldSummary {
+                        name: "_schema_note".to_string(),
+                        field_type: "note".to_string(),
+                        nullable: true,
+                        description: Some(
+                            "⚠️ This table has JSONB columns (attributes) but no queryable fields defined. \
+                            If you need to filter by attributes, add the requirement to 'open_questions'."
+                                .to_string(),
+                        ),
+                        enum_values: None,
+                    });
+                }
+
                 TableSummary {
                     name: entity.name.clone(),
                     alias,
@@ -166,6 +196,30 @@ impl SchemaSummary {
                 }
             })
             .collect();
+
+        // Add derived fields as queryable fields (they appear as regular fields to the LLM)
+        // Derived fields are cross-table computed fields that can be used in queries
+        for derived_field in &registry.cards.derived_fields {
+            // Extract the table name from the first depends_on field
+            // E.g., "products_latest.name" -> "products_latest"
+            if let Some(first_dep) = derived_field.depends_on.first() {
+                if let Some(table_name) = first_dep.split('.').next() {
+                    // Find the table and add this derived field to it
+                    if let Some(table) = tables.iter_mut().find(|t| t.name == table_name) {
+                        table.fields.push(FieldSummary {
+                            name: derived_field.name.clone(),
+                            field_type: "derived".to_string(),
+                            nullable: true, // Derived fields are typically nullable
+                            description: Some(format!(
+                                "{} (derived field)",
+                                derived_field.description
+                            )),
+                            enum_values: None,
+                        });
+                    }
+                }
+            }
+        }
 
         // Convert join graph to relationships (simplified for now)
         let relationships = registry

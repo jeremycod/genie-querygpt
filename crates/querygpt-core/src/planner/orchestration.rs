@@ -286,6 +286,7 @@ mod tests {
         let spec = ReportSpec {
             version: 1,
             workspace: "campaigns_offers".to_string(),
+            primary_entity: None,
             select: vec![SelectItem {
                 field: "campaign_id".to_string(),
                 alias: None,

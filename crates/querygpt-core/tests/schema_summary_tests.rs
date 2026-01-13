@@ -70,6 +70,7 @@ fn enhanced_planner_context_creates_rich_context() {
         spec: ReportSpec {
             version: 1,
             workspace: "campaigns_offers".to_string(),
+            primary_entity: None,
             select: vec![SelectItem {
                 field: "campaign_id".to_string(),
                 alias: None,
@@ -116,6 +117,7 @@ fn enhanced_prompt_includes_schema_details() {
         spec: ReportSpec {
             version: 1,
             workspace: "test".to_string(),
+            primary_entity: None,
             select: vec![SelectItem {
                 field: "id".to_string(),
                 alias: None,

@@ -9,6 +9,7 @@ mod tests {
         ReportSpec {
             version: 1,
             workspace: workspace.to_string(),
+            primary_entity: None,
             select: vec![querygpt_core::dsl::report_spec::SelectItem {
                 field: field.to_string(),
                 alias: None,

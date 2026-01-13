@@ -77,7 +77,26 @@
           "pii": false
         }
       ],
-      "json_paths": [],
+      "json_paths": [
+        {
+          "column": "attributes",
+          "path": "$.status",
+          "data_type": "array",
+          "description": "Product status (e.g., LIVE, DRAFT)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.eventDate",
+          "data_type": "array",
+          "description": "Event date(s) associated with the product"
+        },
+        {
+          "column": "attributes",
+          "path": "$.catalogDate",
+          "data_type": "array",
+          "description": "Catalog date(s) for the product"
+        }
+      ],
       "common_filters": [
         {
           "name": "active_products",
@@ -263,6 +282,13 @@
           "pii": false
         },
         {
+          "name": "attributes",
+          "data_type": "jsonb",
+          "nullable": true,
+          "description": "Offer attributes blob",
+          "pii": false
+        },
+        {
           "name": "profile",
           "data_type": "varchar",
           "nullable": false,
@@ -284,12 +310,174 @@
           "pii": false
         }
       ],
-      "json_paths": [],
+      "json_paths": [
+        {
+          "column": "attributes",
+          "path": "$.partner",
+          "data_type": "array",
+          "description": "Partner name(s) for this offer"
+        },
+        {
+          "column": "attributes",
+          "path": "$.countries",
+          "data_type": "array",
+          "description": "Countries where this offer is available (ISO 3166-1 alpha-2 codes)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.offerType",
+          "data_type": "array",
+          "description": "Type of offer (e.g., PARTNER, DIRECT, DIRECT_BILLING)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.packageId",
+          "data_type": "array",
+          "description": "Package identifier(s) associated with this offer"
+        },
+        {
+          "column": "attributes",
+          "path": "$.partnerId",
+          "data_type": "array",
+          "description": "Partner UUID(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.providers",
+          "data_type": "array",
+          "description": "Provider name(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.namespaces",
+          "data_type": "array",
+          "description": "Namespace(s) for this offer (e.g., disney, HULU)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.providerIds",
+          "data_type": "array",
+          "description": "Provider UUID(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.offer_status",
+          "data_type": "array",
+          "description": "Offer status (e.g., LIVE, DRAFT)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.referenceLinks",
+          "data_type": "array",
+          "description": "Reference links (e.g., JIRA tickets)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.offer_sale_type",
+          "data_type": "array",
+          "description": "Sale type for this offer (e.g., BUNDLED, PRESENTATION_ADD_ON)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.stackingAllowed",
+          "data_type": "array",
+          "description": "Whether stacking is allowed (true/false)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.billingFrequency",
+          "data_type": "array",
+          "description": "Billing frequency (e.g., MONTH, YEAR, ONCE)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.partner_paid_upon",
+          "data_type": "array",
+          "description": "When partner gets paid"
+        },
+        {
+          "column": "attributes",
+          "path": "$.promotion_type_3pp",
+          "data_type": "array",
+          "description": "Third-party promotion type (e.g., PROMO_DURATION, NONE)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.partner_paid_amount",
+          "data_type": "array",
+          "description": "Amount partner gets paid"
+        },
+        {
+          "column": "attributes",
+          "path": "$.l4l",
+          "data_type": "array",
+          "description": "L4L flag (true/false)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.labels",
+          "data_type": "array",
+          "description": "Labels for this offer (e.g., base, presentation_addon)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.status",
+          "data_type": "array",
+          "description": "Status (e.g., LIVE, DRAFT)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.endDate",
+          "data_type": "array",
+          "description": "Offer end date(s) (when the offer expires)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.saleType",
+          "data_type": "array",
+          "description": "Sale type (e.g., PRESENTATION_ADD_ON)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.offer_tag",
+          "data_type": "array",
+          "description": "Offer tag(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.priceType",
+          "data_type": "array",
+          "description": "Type of pricing for this offer (e.g., RETAIL, WHOLESALE)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.startDate",
+          "data_type": "array",
+          "description": "Offer start date(s) (when the offer becomes available)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.currencyCode",
+          "data_type": "array",
+          "description": "Currency code(s) (e.g., USD, EUR)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.paymentMethodRequired",
+          "data_type": "array",
+          "description": "Whether payment method is required (true/false)"
+        }
+      ],
       "common_filters": [
         {
           "name": "offers_with_discounts",
           "sql": "discount_id IS NOT NULL",
           "description": "Filter for offers that have discounts"
+        },
+        {
+          "name": "retail_offers",
+          "sql": "attributes::jsonb ->> 'priceType' = 'RETAIL'",
+          "description": "Filter for retail offers only"
         }
       ],
       "tags": [

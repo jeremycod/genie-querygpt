@@ -28,6 +28,7 @@ async fn orchestration_success_path_with_fixture_planner() {
     let valid_spec = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -78,6 +79,7 @@ async fn orchestration_revision_loop_with_fake_planner() {
     let invalid_spec = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "invalid_field".to_string(),
             alias: None,
@@ -92,6 +94,7 @@ async fn orchestration_revision_loop_with_fake_planner() {
     let valid_spec = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -144,6 +147,7 @@ async fn orchestration_max_attempts_exceeded() {
     let invalid_spec = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "field_that_does_not_exist".to_string(),
             alias: None,
@@ -191,6 +195,7 @@ async fn orchestration_compile_only_path() {
     let valid_spec = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
@@ -233,6 +238,7 @@ async fn orchestration_trace_captures_flow() {
     let valid_spec = ReportSpec {
         version: 1,
         workspace: "campaigns_offers".to_string(),
+        primary_entity: None,
         select: vec![SelectItem {
             field: "campaign_id".to_string(),
             alias: None,
