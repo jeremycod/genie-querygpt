@@ -99,7 +99,26 @@
           "pii": false
         }
       ],
-      "json_paths": [],
+      "json_paths": [
+        {
+          "column": "attributes",
+          "path": "$.status",
+          "data_type": "array",
+          "description": "SKU status (e.g., LIVE, DRAFT)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.distributionChannel",
+          "data_type": "array",
+          "description": "Distribution channel(s) for this SKU"
+        },
+        {
+          "column": "attributes",
+          "path": "$.storeId",
+          "data_type": "array",
+          "description": "Store identifier(s) for platform-specific stores"
+        }
+      ],
       "common_filters": [
         {
           "name": "active_skus",
@@ -251,7 +270,19 @@
           "column": "attributes",
           "path": "$.brand",
           "data_type": "array",
-          "description": "Brand associated with campaign"
+          "description": "Brand associated with campaign (e.g., DISNEY, HULU, ESPN)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.status",
+          "data_type": "array",
+          "description": "Campaign status (e.g., LIVE, DRAFT)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.endDate",
+          "data_type": "array",
+          "description": "Campaign end date(s)"
         },
         {
           "column": "attributes",
@@ -263,7 +294,85 @@
           "column": "attributes",
           "path": "$.platforms",
           "data_type": "array",
-          "description": "Platforms where campaign is available"
+          "description": "Platforms where campaign is available (e.g., WEB, ROKU_VERIFIABLE, SAMSUNG_TIZEN)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.startDate",
+          "data_type": "array",
+          "description": "Campaign start date(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.billingType",
+          "data_type": "array",
+          "description": "Billing type (e.g., BILLING_D2C, BILLING_3PP)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.hasSignupFlow",
+          "data_type": "array",
+          "description": "Whether campaign has signup flow (true/false)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.purchaseFlows",
+          "data_type": "array",
+          "description": "Purchase flows available (e.g., signup, switch, landing)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.referenceLinks",
+          "data_type": "array",
+          "description": "Reference links (JIRA tickets, docs, runbooks)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.requires_payment_instrument",
+          "data_type": "array",
+          "description": "Whether payment instrument is required (true/false)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.partner",
+          "data_type": "array",
+          "description": "Partner identifier(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.landingURL",
+          "data_type": "array",
+          "description": "Landing URL(s) for the campaign"
+        },
+        {
+          "column": "attributes",
+          "path": "$.hisufPackages",
+          "data_type": "array",
+          "description": "HISUF package(s) (e.g., disney_duo_basic)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.allowPromoSubs",
+          "data_type": "array",
+          "description": "Whether promotional subscriptions are allowed (true/false)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.destinationCampaignId",
+          "data_type": "array",
+          "description": "Destination campaign ID(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.requires_redemption_code",
+          "data_type": "array",
+          "description": "Whether redemption code is required (true/false)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.hasAccountManagement",
+          "data_type": "array",
+          "description": "Whether campaign has account management (true/false)"
         }
       ],
       "common_filters": [
@@ -374,6 +483,13 @@
           "pii": false
         },
         {
+          "name": "attributes",
+          "data_type": "jsonb",
+          "nullable": true,
+          "description": "Offer attributes blob",
+          "pii": false
+        },
+        {
           "name": "profile",
           "data_type": "varchar",
           "nullable": false,
@@ -395,7 +511,80 @@
           "pii": false
         }
       ],
-      "json_paths": [],
+      "json_paths": [
+        {
+          "column": "attributes",
+          "path": "$.partner",
+          "data_type": "array",
+          "description": "Partner name(s) for this offer"
+        },
+        {
+          "column": "attributes",
+          "path": "$.offerType",
+          "data_type": "array",
+          "description": "Type of offer (e.g., PARTNER, DIRECT, DIRECT_BILLING)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.packageId",
+          "data_type": "array",
+          "description": "Package identifier(s) associated with this offer"
+        },
+        {
+          "column": "attributes",
+          "path": "$.partnerId",
+          "data_type": "array",
+          "description": "Partner UUID(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.startDate",
+          "data_type": "array",
+          "description": "Offer start date(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.endDate",
+          "data_type": "array",
+          "description": "Offer end date(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.providerIds",
+          "data_type": "array",
+          "description": "Provider UUID(s)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.referenceLinks",
+          "data_type": "array",
+          "description": "Reference links (e.g., JIRA tickets)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.offer_sale_type",
+          "data_type": "array",
+          "description": "Sale type for this offer (e.g., BUNDLED)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.stackingAllowed",
+          "data_type": "array",
+          "description": "Whether stacking is allowed (true/false)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.billingFrequency",
+          "data_type": "array",
+          "description": "Billing frequency (e.g., MONTH, YEAR)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.promotion_type_3pp",
+          "data_type": "array",
+          "description": "Third-party promotion type (e.g., NONE)"
+        }
+      ],
       "common_filters": [
         {
           "name": "active_offers",

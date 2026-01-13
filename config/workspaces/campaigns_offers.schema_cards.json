@@ -241,6 +241,13 @@
           "pii": false
         },
         {
+          "name": "attributes",
+          "data_type": "jsonb",
+          "nullable": true,
+          "description": "Campaign attributes blob",
+          "pii": false
+        },
+        {
           "name": "profile",
           "data_type": "varchar",
           "nullable": false,
@@ -633,7 +640,26 @@
           "pii": false
         }
       ],
-      "json_paths": [],
+      "json_paths": [
+        {
+          "column": "attributes",
+          "path": "$.status",
+          "data_type": "array",
+          "description": "Product status (e.g., LIVE, DRAFT)"
+        },
+        {
+          "column": "attributes",
+          "path": "$.eventDate",
+          "data_type": "array",
+          "description": "Event date(s) associated with the product"
+        },
+        {
+          "column": "attributes",
+          "path": "$.catalogDate",
+          "data_type": "array",
+          "description": "Catalog date(s) for the product"
+        }
+      ],
       "common_filters": [],
       "tags": [
         "entity_head",
