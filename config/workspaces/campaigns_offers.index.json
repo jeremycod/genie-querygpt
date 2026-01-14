@@ -1,13 +1,15 @@
 {
   "workspace": "campaigns_offers",
-  "description": "Campaigns & Offers reporting workspace. Uses *_latest MVs for entity heads and enforces version-safe joins.",
+  "description": "Campaigns & Offers reporting workspace. Uses *_latest MVs for entity heads and enforces version-safe joins.\n\n🔑 KEYWORD MAPPINGS:\n- 'bundle' queries → use 'hulu_bundle_id' field (NOT packageId)\n- 'retail' / 'prepaid' / price type queries → use 'priceType' field\n- 'discount' queries → use 'discount_id' field (offer-level or phase-level)\n- 'package' / 'packageId' → use 'packageId' field for export IDs only",
   "schema_cards_path": "config/workspaces/campaigns_offers.schema_cards.json",
   "exemplar_sql_dir": "config/workspaces/campaigns_offers/exemplars",
   "tags": [
     "campaigns",
     "offers",
     "exports",
-    "prepaid"
+    "prepaid",
+    "bundle",
+    "retail"
   ],
   "entities": [
     "offers_latest",
