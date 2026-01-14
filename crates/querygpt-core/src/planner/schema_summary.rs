@@ -132,16 +132,47 @@ impl SchemaSummary {
                 // Convert columns to field summaries
                 // Skip promoted columns that have JSONB equivalents (we'll expose JSONB version instead)
                 let skip_promoted_columns = ["start_date", "end_date", "status", "countries"];
+
+                // Get list of JSONB columns that have json_paths defined
+                // Add warning to discourage direct selection
+                let jsonb_columns_with_paths: std::collections::HashSet<&str> = entity
+                    .json_paths
+                    .iter()
+                    .map(|jp| jp.column.as_str())
+                    .collect();
+
                 let mut fields: Vec<FieldSummary> = entity
                     .columns
                     .iter()
                     .filter(|col| !skip_promoted_columns.contains(&col.name.as_str()))
-                    .map(|col| FieldSummary {
-                        name: col.name.clone(),
-                        field_type: col.data_type.clone(),
-                        nullable: col.nullable,
-                        description: Some(col.description.clone()),
-                        enum_values: None, // Could be enhanced later
+                    .map(|col| {
+                        let mut description = col.description.clone();
+
+                        // Add warning for JSONB columns with json_paths
+                        if jsonb_columns_with_paths.contains(col.name.as_str()) {
+                            let extracted_fields: Vec<String> = entity
+                                .json_paths
+                                .iter()
+                                .filter(|jp| jp.column == col.name)
+                                .map(|jp| jp.path.trim_start_matches("$.").to_string())
+                                .take(8) // Show first 8 fields
+                                .collect();
+
+                            if !extracted_fields.is_empty() {
+                                description = format!(
+                                    "⚠️ DO NOT USE FOR FILTERING. Use extracted fields instead: {}. This raw JSONB column should only be selected if user explicitly asks for the complete raw JSON object.",
+                                    extracted_fields.join(", ")
+                                );
+                            }
+                        }
+
+                        FieldSummary {
+                            name: col.name.clone(),
+                            field_type: col.data_type.clone(),
+                            nullable: col.nullable,
+                            description: Some(description),
+                            enum_values: None,
+                        }
                     })
                     .collect();
 
@@ -149,11 +180,23 @@ impl SchemaSummary {
                 for json_path in &entity.json_paths {
                     // Extract field name from $.fieldName
                     let field_name = json_path.path.trim_start_matches("$.");
+
+                    // Add note about source column for context
+                    let enhanced_description = if json_path.column == "legacy" || json_path.column == "attributes" {
+                        format!(
+                            "{} (extracted from {} JSONB column)",
+                            json_path.description,
+                            json_path.column
+                        )
+                    } else {
+                        json_path.description.clone()
+                    };
+
                     fields.push(FieldSummary {
                         name: field_name.to_string(),
                         field_type: json_path.data_type.clone(),
                         nullable: true, // JSONB fields are always nullable
-                        description: Some(json_path.description.clone()),
+                        description: Some(enhanced_description),
                         enum_values: None,
                     });
                 }

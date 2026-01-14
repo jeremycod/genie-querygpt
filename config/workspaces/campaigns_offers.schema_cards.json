@@ -79,6 +79,13 @@
           "pii": false
         },
         {
+          "name": "legacy",
+          "data_type": "jsonb",
+          "nullable": true,
+          "description": "Legacy Hulu/Disney metadata (hulu_bundle_id, disney_offer_id, etc.)",
+          "pii": false
+        },
+        {
           "name": "profile",
           "data_type": "varchar",
           "nullable": false,
@@ -190,6 +197,84 @@
           "path": "$.paymentMethodRequired",
           "data_type": "array",
           "description": "Whether payment method is required"
+        },
+        {
+          "column": "legacy",
+          "path": "$.hulu_bundle_id",
+          "data_type": "string",
+          "description": "Hulu bundle identifier"
+        },
+        {
+          "column": "legacy",
+          "path": "$.hulu_program_id",
+          "data_type": "string",
+          "description": "Hulu program identifier"
+        },
+        {
+          "column": "legacy",
+          "path": "$.hulu_component_id",
+          "data_type": "string",
+          "description": "Hulu component identifier"
+        },
+        {
+          "column": "legacy",
+          "path": "$.hulu_graph_id",
+          "data_type": "string",
+          "description": "Hulu graph identifier"
+        },
+        {
+          "column": "legacy",
+          "path": "$.hulu_identifier",
+          "data_type": "string",
+          "description": "Hulu identifier code (e.g., NOAH)"
+        },
+        {
+          "column": "legacy",
+          "path": "$.hulu_category",
+          "data_type": "string",
+          "description": "Hulu category (e.g., BASE)"
+        },
+        {
+          "column": "legacy",
+          "path": "$.disney_offer_id",
+          "data_type": "string",
+          "description": "Disney offer UUID"
+        },
+        {
+          "column": "legacy",
+          "path": "$.disney_offer_period",
+          "data_type": "string",
+          "description": "Disney offer period (e.g., MONTH)"
+        },
+        {
+          "column": "legacy",
+          "path": "$.disney_original_product_id",
+          "data_type": "string",
+          "description": "Disney original product UUID"
+        },
+        {
+          "column": "legacy",
+          "path": "$.effective_date",
+          "data_type": "timestamp",
+          "description": "Effective date for the legacy data"
+        },
+        {
+          "column": "legacy",
+          "path": "$.namespace",
+          "data_type": "string",
+          "description": "Namespace (e.g., disney, hulu)"
+        },
+        {
+          "column": "legacy",
+          "path": "$.channel_type",
+          "data_type": "string",
+          "description": "Channel type (e.g., D2C)"
+        },
+        {
+          "column": "legacy",
+          "path": "$.offer_status",
+          "data_type": "string",
+          "description": "Offer status in legacy system (e.g., LIVE)"
         }
       ],
       "common_filters": [

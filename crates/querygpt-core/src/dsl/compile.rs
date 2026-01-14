@@ -156,7 +156,8 @@ fn field_to_sql_expr(
 
     // Priority 2: Check json_paths in schema (source of truth for JSONB attributes)
     // Try both exact match and camelCase conversion (e.g., package_id → packageId)
-    // ALL JSONB fields are stored as arrays, even single-value fields like brand, startDate
+    // Array fields: use -> operator, caller will add ->> 0 or use array operators
+    // Scalar fields: use ->> operator directly for text extraction
     let field_camel = to_camel_case(field);
     for entity in &cards.entities {
         if let Some(alias) = alias_map.get(&entity.name) {
@@ -164,11 +165,16 @@ fn field_to_sql_expr(
                 // Extract field name from $.fieldName
                 let path_field = json_path.path.trim_start_matches("$.");
                 if path_field == field || path_field == field_camel {
-                    // All JSONB attributes are stored as arrays - return base path (-> 'field')
-                    // Callers will add ->> 0 for single-value arrays or use ?| for multi-value
+                    // Use -> for arrays (caller will add ->> 0 or use array operators)
+                    // Use ->> for scalars (direct text extraction)
+                    let operator = if json_path.data_type.to_lowercase() == "array" {
+                        "->"
+                    } else {
+                        "->>"
+                    };
                     return Some(format!(
-                        "{}.{} -> '{}'",
-                        alias, json_path.column, path_field
+                        "{}.{} {} '{}'",
+                        alias, json_path.column, operator, path_field
                     ));
                 }
             }
@@ -180,8 +186,14 @@ fn field_to_sql_expr(
     if !skip_direct_columns.contains(&field) {
         for entity in &cards.entities {
             if let Some(alias) = alias_map.get(&entity.name) {
-                if entity.columns.iter().any(|c| c.name == field) {
-                    return Some(format!("{}.{}", alias, field));
+                if let Some(col) = entity.columns.iter().find(|c| c.name == field) {
+                    // JSONB columns must be cast to text for serialization
+                    // When user asks for "legacy" or "attributes", return the whole JSONB as text
+                    if col.data_type.to_lowercase() == "jsonb" {
+                        return Some(format!("{}.{}::text", alias, field));
+                    } else {
+                        return Some(format!("{}.{}", alias, field));
+                    }
                 }
             }
         }
@@ -337,7 +349,8 @@ pub fn translate_projections(
         .collect()
 }
 
-/// Helper to check if a field is a JSONB field (all JSONB fields are stored as arrays)
+/// Helper to check if a field is a JSONB array field
+/// Returns true only if the field is defined in json_paths with data_type = "array"
 fn is_jsonb_array_field(field: &str, cards: &SchemaCards) -> bool {
     let field_camel = to_camel_case(field);
 
@@ -353,15 +366,17 @@ fn is_jsonb_array_field(field: &str, cards: &SchemaCards) -> bool {
                 || path_field == field_without_prefix
                 || path_field == field_without_prefix_camel
             {
-                // All JSONB attributes are stored as arrays, regardless of data_type
-                return true;
+                // Check if this specific field is defined as an array type
+                // Legacy fields (e.g., hulu_bundle_id) are scalars, not arrays
+                // Attributes fields may be arrays or scalars depending on data_type
+                return json_path.data_type.to_lowercase() == "array";
             }
         }
     }
     false
 }
 
-/// Get the JSONB base path for a field (e.g., "o.attributes -> 'brand'")
+/// Get the JSONB base path for a field (e.g., "o.attributes -> 'brand'" or "oph.legacy ->> 'hulu_bundle_id'")
 fn get_jsonb_base_path(
     field: &str,
     alias_map: &HashMap<String, String>,
@@ -373,9 +388,16 @@ fn get_jsonb_base_path(
             for json_path in &entity.json_paths {
                 let path_field = json_path.path.trim_start_matches("$.");
                 if path_field == field || path_field == field_camel {
+                    // Use -> for arrays (will be used with array operators like @>, ?|)
+                    // Use ->> for scalars (will be used with standard comparison operators)
+                    let operator = if json_path.data_type.to_lowercase() == "array" {
+                        "->"
+                    } else {
+                        "->>"
+                    };
                     return Some(format!(
-                        "{}.{} -> '{}'",
-                        alias, json_path.column, path_field
+                        "{}.{} {} '{}'",
+                        alias, json_path.column, operator, path_field
                     ));
                 }
             }
