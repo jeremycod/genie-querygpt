@@ -212,7 +212,7 @@ expression: plan
     },
     {
       "field": "package_id",
-      "expression": "o.attributes -> 'packageId' ->> 0",
+      "expression": "o.attributes ->> 'packageId'",
       "alias": "package_id"
     }
   ],

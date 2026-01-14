@@ -384,7 +384,9 @@ IMPORTANT: Fix the errors and output only valid JSON. No explanations outside th
     /// Format schema summary for LLM context
     fn format_schema_summary(schema: &SchemaSummary) -> String {
         let mut result = String::from("SCHEMA SUMMARY:\n");
-        result.push_str("⚠️  IMPORTANT: Use field names directly (e.g., 'id', 'name'). DO NOT prefix with table name or alias!\n\n");
+        result.push_str("⚠️  IMPORTANT: Use field names directly (e.g., 'id', 'name'). DO NOT prefix with table name or alias!\n");
+        result.push_str("📝 NOTE: Fields extracted from JSONB columns (e.g., hulu_bundle_id, disney_offer_id) are queryable as top-level fields.\n");
+        result.push_str("    Example: {\"field\": \"hulu_bundle_id\", \"op\": \"eq\", \"value\": \"29\"} NOT {\"field\": \"legacy->>'hulu_bundle_id'\", ...}\n\n");
 
         // Format tables and fields
         for table in &schema.tables {
