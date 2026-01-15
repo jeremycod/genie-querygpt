@@ -15,26 +15,6 @@ expression: plan
       "alias": "c"
     },
     {
-      "name": "campaigns_latest",
-      "alias": "c"
-    },
-    {
-      "name": "offers_latest",
-      "alias": "o"
-    },
-    {
-      "name": "offers_latest",
-      "alias": "o"
-    },
-    {
-      "name": "offers_latest",
-      "alias": "o"
-    },
-    {
-      "name": "offers_latest",
-      "alias": "o"
-    },
-    {
       "name": "offers_latest",
       "alias": "o"
     },
@@ -43,32 +23,8 @@ expression: plan
       "alias": "opr"
     },
     {
-      "name": "offers_latest",
-      "alias": "o"
-    },
-    {
       "name": "offer_phases",
       "alias": "oph"
-    },
-    {
-      "name": "offers_latest",
-      "alias": "o"
-    },
-    {
-      "name": "offers_latest",
-      "alias": "o"
-    },
-    {
-      "name": "partners",
-      "alias": "p"
-    },
-    {
-      "name": "campaigns_latest",
-      "alias": "c"
-    },
-    {
-      "name": "offers_latest",
-      "alias": "o"
     },
     {
       "name": "campaign_offers",

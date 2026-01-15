@@ -209,7 +209,7 @@ impl ErrorResponse {
 /// Query execution preview data (for Preview Tab)
 ///
 /// Re-exported from executor module for convenience
-pub use crate::executor::{ColumnInfo, QueryResult as PreviewData};
+pub use crate::executor::{QueryResult as PreviewData};
 
 /// Pipeline visualization data (for Code Tab)
 #[derive(Debug, Clone, Serialize, Deserialize)]

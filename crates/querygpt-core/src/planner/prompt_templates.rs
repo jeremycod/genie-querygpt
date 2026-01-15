@@ -28,6 +28,45 @@ CONSTRAINTS:
 {}
 
 WORKSPACE: {}
+
+🔑 CRITICAL KEYWORD-TO-FIELD MAPPINGS (READ THIS FIRST!) 🔑
+Before writing the ReportSpec, check if the user's query contains these keywords:
+- "bundle" / "bundle id" / "bundle 29" → Use field "hulu_bundle_id" (NOT offer_id, NOT packageId)
+- "retail" / "prepaid" / "price type" → Use field "priceType"
+- "discount" / "discount id" → Use field "discount_id"
+- "phase level discount" / "phase discount" → Use primary_entity="offer_phases" + field "discount_id"
+- "discount amount" / "discount value" → Use field "discount_amount" (auto-joins to discount_amounts table)
+
+⚠️ CROSS-TABLE FILTERING & SELECTION ⚠️
+You CAN filter AND SELECT fields from other tables! The compiler will auto-join them.
+- Filters: primary_entity="offer_phases" + filter on "hulu_bundle_id" → auto-joins to offers_latest
+- Selections: primary_entity="offer_phases" + select "name" → auto-joins to offers_latest and returns o.name
+
+🎯 PRIMARY ENTITY DETERMINES ROW-LEVEL GRANULARITY:
+- primary_entity="offers_latest" → returns one row per offer (offer_id is unique)
+- primary_entity="offer_phases" → returns one row per phase (offer can have multiple phases)
+
+When querying phases, ALWAYS include cross-table fields to provide context:
+- Include "offer_id" to show which offer the phase belongs to
+- Include "name" to show the offer name (even though primary_entity is offer_phases)
+
+EXAMPLES:
+1. "Find offers for bundle 29" → {{"field": "hulu_bundle_id", "op": "eq", "value": "29"}}
+   ❌ WRONG: {{"field": "offer_id", "op": "in", "value": ["29"]}} - "29" is NOT an offer_id!
+
+2. "Find retail offers for bundle 29 with phase discounts and show offer info" →
+   primary_entity: "offer_phases"
+   select: [
+     {{"field": "offer_id", "alias": null}},  // Cross-table: o.id
+     {{"field": "name", "alias": null}},      // Cross-table: o.name
+     {{"field": "id", "alias": null}},        // Phase id: oph.id
+     {{"field": "discount_id", "alias": null}}  // Phase discount: oph.discount_id
+   ]
+   filters: [
+     {{"field": "hulu_bundle_id", "op": "eq", "value": "29"}},
+     {{"field": "priceType", "op": "contains", "value": "RETAIL"}}
+   ]
+
 {}
 {}
 
@@ -236,6 +275,21 @@ When you see "unknown field 'X'" errors:
 2. If NO: The field doesn't exist. Add it to "open_questions" instead of using it
 3. If YES: Check for typos or SQL prefixes (remove "table." prefixes)
 
+🚨 CRITICAL: DO NOT USE SQL SYNTAX IN FIELD NAMES! 🚨
+WRONG examples (DO NOT DO THIS):
+  ❌ "legacy->>'hulu_bundle_id'" - This is SQL syntax, not a field name!
+  ❌ "attributes->>'packageId'" - This is SQL syntax, not a field name!
+  ❌ "o.id" - This has a table prefix
+
+CORRECT examples (USE THESE):
+  ✅ "hulu_bundle_id" - This is the field name
+  ✅ "packageId" - This is the field name
+  ✅ "id" - This is the field name
+
+If you see an error like: unknown field 'legacy->>'hulu_bundle_id''
+The fix is NOT to keep using the same syntax!
+Instead, remove the SQL operators and use just the field name: "hulu_bundle_id"
+
 If the user's original request asks for data that doesn't exist in the schema:
 - DO NOT keep trying to use non-existent field names
 - ADD the missing fields to "open_questions"
@@ -246,6 +300,45 @@ CONSTRAINTS:
 {}
 
 WORKSPACE: {}
+
+🔑 CRITICAL KEYWORD-TO-FIELD MAPPINGS (READ THIS FIRST!) 🔑
+Before writing the ReportSpec, check if the user's query contains these keywords:
+- "bundle" / "bundle id" / "bundle 29" → Use field "hulu_bundle_id" (NOT offer_id, NOT packageId)
+- "retail" / "prepaid" / "price type" → Use field "priceType"
+- "discount" / "discount id" → Use field "discount_id"
+- "phase level discount" / "phase discount" → Use primary_entity="offer_phases" + field "discount_id"
+- "discount amount" / "discount value" → Use field "discount_amount" (auto-joins to discount_amounts table)
+
+⚠️ CROSS-TABLE FILTERING & SELECTION ⚠️
+You CAN filter AND SELECT fields from other tables! The compiler will auto-join them.
+- Filters: primary_entity="offer_phases" + filter on "hulu_bundle_id" → auto-joins to offers_latest
+- Selections: primary_entity="offer_phases" + select "name" → auto-joins to offers_latest and returns o.name
+
+🎯 PRIMARY ENTITY DETERMINES ROW-LEVEL GRANULARITY:
+- primary_entity="offers_latest" → returns one row per offer (offer_id is unique)
+- primary_entity="offer_phases" → returns one row per phase (offer can have multiple phases)
+
+When querying phases, ALWAYS include cross-table fields to provide context:
+- Include "offer_id" to show which offer the phase belongs to
+- Include "name" to show the offer name (even though primary_entity is offer_phases)
+
+EXAMPLES:
+1. "Find offers for bundle 29" → {{"field": "hulu_bundle_id", "op": "eq", "value": "29"}}
+   ❌ WRONG: {{"field": "offer_id", "op": "in", "value": ["29"]}} - "29" is NOT an offer_id!
+
+2. "Find retail offers for bundle 29 with phase discounts and show offer info" →
+   primary_entity: "offer_phases"
+   select: [
+     {{"field": "offer_id", "alias": null}},  // Cross-table: o.id
+     {{"field": "name", "alias": null}},      // Cross-table: o.name
+     {{"field": "id", "alias": null}},        // Phase id: oph.id
+     {{"field": "discount_id", "alias": null}}  // Phase discount: oph.discount_id
+   ]
+   filters: [
+     {{"field": "hulu_bundle_id", "op": "eq", "value": "29"}},
+     {{"field": "priceType", "op": "contains", "value": "RETAIL"}}
+   ]
+
 {}
 
 🎯 PRIMARY ENTITY (CRITICAL - MUST SPECIFY!)
