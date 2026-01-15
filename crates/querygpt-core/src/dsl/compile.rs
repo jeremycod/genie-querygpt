@@ -107,14 +107,50 @@ fn normalize_join_condition_for_aliases(
 
 /// Translate a single field name into its SQL expression.
 /// Uses schema cards to determine if field is a JSONB path or direct column.
-/// Priority: 1) Semantic mappings, 2) JSONB paths, 3) Direct columns
+/// Priority: 1) Primary entity (if specified), 2) Semantic mappings, 3) JSONB paths, 4) Direct columns
 fn field_to_sql_expr(
     field: &str,
     alias_map: &HashMap<String, String>,
     cards: &SchemaCards,
+    primary_entity: Option<&str>,
 ) -> Option<String> {
-    // Priority 1: Semantic mappings (explicit user-friendly names - highest priority)
+    // Priority 1: Check primary entity first (resolves ambiguous fields like 'id', 'discount_id', 'offer_id')
+    // When primary_entity is specified and field exists there, use it
+    // This ensures that when querying offer_phases as primary, we get oph.id not o.id
+    if let Some(primary) = primary_entity {
+        if let Some(entity) = cards.entities.iter().find(|e| e.name == primary) {
+            if let Some(alias) = alias_map.get(&entity.name) {
+                // Check json_paths in primary entity
+                let field_camel = to_camel_case(field);
+                for json_path in &entity.json_paths {
+                    let path_field = json_path.path.trim_start_matches("$.");
+                    if path_field == field || path_field == field_camel {
+                        let operator = if json_path.data_type.to_lowercase() == "array" {
+                            "->"
+                        } else {
+                            "->>"
+                        };
+                        return Some(format!(
+                            "{}.{} {} '{}'",
+                            alias, json_path.column, operator, path_field
+                        ));
+                    }
+                }
+                // Check direct columns in primary entity
+                if let Some(col) = entity.columns.iter().find(|c| c.name == field) {
+                    if col.data_type.to_lowercase() == "jsonb" {
+                        return Some(format!("{}.{}::text", alias, field));
+                    } else {
+                        return Some(format!("{}.{}", alias, field));
+                    }
+                }
+            }
+        }
+    }
+
+    // Priority 2: Semantic mappings (explicit user-friendly names for cross-table queries)
     // These are well-known field names that map to specific columns
+    // Only used when primary_entity didn't resolve the field
     let semantic_result = match field {
         "partnership_id" => alias_map.get("partners").map(|a| format!("{}.id", a)),
         "campaign_id" => alias_map
@@ -145,8 +181,17 @@ fn field_to_sql_expr(
         "price_id" => alias_map
             .get("offer_products")
             .map(|a| format!("{}.price_id", a)),
-        "price_amount" | "amount" => alias_map.get("prices").map(|a| format!("{}.amount", a)),
+        "price_amount" => alias_map.get("prices").map(|a| format!("{}.amount", a)),
         "currency" => alias_map.get("prices").map(|a| format!("{}.currency", a)),
+        "discount_name" => alias_map
+            .get("discounts_latest")
+            .map(|a| format!("{}.name", a)),
+        "discount_type" => alias_map
+            .get("discounts_latest")
+            .map(|a| format!("{}.type", a)),
+        "discount_amount" | "amount" => alias_map
+            .get("discount_amounts")
+            .map(|a| format!("{}.amount", a)),
         "promo_type" => Some("promo_type".to_string()), // Special: resolved in filter translation
         _ => None,
     };
@@ -154,7 +199,7 @@ fn field_to_sql_expr(
         return semantic_result;
     }
 
-    // Priority 2: Check json_paths in schema (source of truth for JSONB attributes)
+    // Priority 3: Check json_paths in schema (source of truth for JSONB attributes)
     // Try both exact match and camelCase conversion (e.g., package_id → packageId)
     // Array fields: use -> operator, caller will add ->> 0 or use array operators
     // Scalar fields: use ->> operator directly for text extraction
@@ -212,6 +257,7 @@ pub fn translate_ordering(
     order_by: &[OrderBy],
     alias_map: &HashMap<String, String>,
     cards: &SchemaCards,
+    primary_entity: Option<&str>,
 ) -> CompilerResult<Vec<PlanOrder>> {
     order_by
         .iter()
@@ -228,12 +274,12 @@ pub fn translate_ordering(
                         })
                 } else {
                     // For direct fields, map to alias.column or fallback via field_to_sql_expr
-                    field_to_sql_expr(&item.field, alias_map, cards).ok_or_else(|| {
-                        CompilerError::UnknownField {
+                    field_to_sql_expr(&item.field, alias_map, cards, primary_entity).ok_or_else(
+                        || CompilerError::UnknownField {
                             field: item.field.clone(),
                             context: "order_by",
-                        }
-                    })?
+                        },
+                    )?
                 };
 
             // Map direction to SortDirection
@@ -283,11 +329,15 @@ pub fn translate_projections(
                         })
                 } else {
                     // Use centralized field resolution (handles JSONB paths, direct columns, semantic mappings)
-                    field_to_sql_expr(&item.field, alias_map, cards).ok_or_else(|| {
-                        CompilerError::UnknownField {
-                            field: item.field.clone(),
-                            context: "select",
-                        }
+                    field_to_sql_expr(
+                        &item.field,
+                        alias_map,
+                        cards,
+                        spec.primary_entity.as_deref(),
+                    )
+                    .ok_or_else(|| CompilerError::UnknownField {
+                        field: item.field.clone(),
+                        context: "select",
                     })?
                 };
 
@@ -306,12 +356,20 @@ pub fn translate_projections(
             // Auto-generate meaningful aliases for better column names
             let alias = if item.alias.is_none() {
                 // Generate human-readable aliases based on field names (using snake_case)
+                // IMPORTANT: Check the actual resolved expression to determine the correct alias
                 match item.field.as_str() {
                     // Explicit semantic field names - keep as-is (already disambiguated)
                     "offer_id" | "offer_name" | "product_id" | "product_name" | "price_id"
-                    | "price_amount" | "campaign_id" | "campaign_name" => Some(item.field.clone()),
-                    // Field aliases that need explicit naming
-                    "amount" => Some("price_amount".to_string()),
+                    | "price_amount" | "campaign_id" | "campaign_name" | "discount_name"
+                    | "discount_type" | "discount_amount" => Some(item.field.clone()),
+                    // Field aliases that need explicit naming - check resolved table
+                    "amount" => {
+                        if expr.starts_with("da.") {
+                            Some("discount_amount".to_string())
+                        } else {
+                            Some("price_amount".to_string()) // Default: pr.amount
+                        }
+                    }
                     "currency" => Some("currency".to_string()),
                     // Campaign fields already have campaign_ prefix, keep as-is
                     "campaign_startDate" | "campaign_endDate" => {
@@ -322,9 +380,29 @@ pub fn translate_projections(
                             .replace("endDate", "end_date");
                         Some(snake)
                     }
-                    // Offer fields - add "offer_" prefix and use snake_case
-                    "id" => Some("offer_id".to_string()),
-                    "name" => Some("offer_name".to_string()),
+                    // Context-aware aliasing for "id" and "name" based on resolved table
+                    "id" => {
+                        // Check which table the expression resolved to
+                        if expr.starts_with("oph.") {
+                            Some("phase_id".to_string())
+                        } else if expr.starts_with("opr.") {
+                            Some("product_id".to_string())
+                        } else if expr.starts_with("c.") {
+                            Some("campaign_id".to_string())
+                        } else {
+                            Some("offer_id".to_string()) // Default: o.id
+                        }
+                    }
+                    "name" => {
+                        // Check which table the expression resolved to
+                        if expr.starts_with("pl.") {
+                            Some("product_name".to_string())
+                        } else if expr.starts_with("c.") {
+                            Some("campaign_name".to_string())
+                        } else {
+                            Some("offer_name".to_string()) // Default: o.name
+                        }
+                    }
                     "startDate" => Some("offer_start_date".to_string()),
                     "endDate" => Some("offer_end_date".to_string()),
                     // For other fields with JSON extractions, convert camelCase to snake_case
@@ -412,14 +490,14 @@ fn translate_filter(
     filter: &Filter,
     alias_map: &HashMap<String, String>,
     cards: &SchemaCards,
+    primary_entity: Option<&str>,
 ) -> CompilerResult<String> {
     // First determine the SQL expression for the field.
-    let column_sql = field_to_sql_expr(&filter.field, alias_map, cards).ok_or_else(|| {
-        CompilerError::UnknownField {
+    let column_sql = field_to_sql_expr(&filter.field, alias_map, cards, primary_entity)
+        .ok_or_else(|| CompilerError::UnknownField {
             field: filter.field.clone(),
             context: "filters",
-        }
-    })?;
+        })?;
 
     // Check if this is a JSONB array field
     let is_array = is_jsonb_array_field(&filter.field, cards);
@@ -640,11 +718,15 @@ pub fn translate_filters(
     filters: &[Filter],
     alias_map: &HashMap<String, String>,
     cards: &SchemaCards,
+    primary_entity: Option<&str>,
 ) -> CompilerResult<Vec<PlanFilter>> {
     // Use cards to resolve field names to SQL expressions (JSONB paths or direct columns)
     filters
         .iter()
-        .map(|f| translate_filter(f, alias_map, cards).map(|sql| PlanFilter { expression: sql }))
+        .map(|f| {
+            translate_filter(f, alias_map, cards, primary_entity)
+                .map(|sql| PlanFilter { expression: sql })
+        })
         .collect()
 }
 
@@ -687,7 +769,10 @@ fn resolve_entity<'a>(
         "product_name" => return Some("products_latest"),
         // price-level fields
         "price_id" => return Some("offer_products"), // FK in offer_products, not prices.id
-        "price_amount" | "amount" | "currency" => return Some("prices"),
+        "price_amount" | "currency" => return Some("prices"),
+        // discount-level fields
+        "discount_name" | "discount_type" => return Some("discounts_latest"),
+        "discount_amount" | "amount" => return Some("discount_amounts"),
         // derived fields that live on offers_latest
         "expired_or_live_status" => return Some("offers_latest"),
         // derived aggregation that comes from offer_products
@@ -742,7 +827,8 @@ fn build_joins(
         .copied()
         .collect();
 
-    cards
+    // First, collect all candidate edges
+    let candidate_edges: Vec<_> = cards
         .join_graph
         .edges
         .iter()
@@ -750,6 +836,55 @@ fn build_joins(
             required_names.contains(&edge.from.as_str())
                 && required_names.contains(&edge.to.as_str())
         })
+        .collect();
+
+    // Detect duplicate joins (multiple paths to same table)
+    // Group by target table and prefer the most specific path
+    let mut target_counts = std::collections::HashMap::new();
+    for edge in &candidate_edges {
+        *target_counts.entry(&edge.to).or_insert(0) += 1;
+    }
+
+    // Filter edges: if a target has multiple sources, keep only the most relevant one
+    // Preference order: offer_phases > offers_latest (prefer child tables over parent tables)
+    let priority_order = vec![
+        "offer_phases",
+        "offer_products",
+        "offers_latest",
+        "campaigns_latest",
+    ];
+
+    let filtered_edges: Vec<_> = candidate_edges
+        .iter()
+        .filter(|edge| {
+            let count = target_counts.get(&edge.to).unwrap_or(&1);
+            if *count <= 1 {
+                // No duplicates, include this edge
+                return true;
+            }
+
+            // Multiple edges to same target - pick the highest priority source
+            let competing_sources: Vec<String> = candidate_edges
+                .iter()
+                .filter(|e| e.to == edge.to)
+                .map(|e| e.from.clone())
+                .collect();
+
+            // Find the highest priority source
+            let best_source_opt = priority_order
+                .iter()
+                .find(|&&p| competing_sources.iter().any(|s| s == p));
+
+            match best_source_opt {
+                Some(best) => edge.from.as_str() == *best,
+                None => true, // If no priority match, include all
+            }
+        })
+        .copied()
+        .collect();
+
+    filtered_edges
+        .iter()
         .map(|edge| -> CompilerResult<PlanJoin> {
             let left_alias = alias_map
                 .get(&edge.from)
@@ -889,26 +1024,53 @@ fn compile_report_spec_internal(
         required_entities.push(&Some("campaign_offers"));
     }
 
-    let tables = required_entities
+    // Add intermediate tables for discount joins
+    // If we have discount_amounts, we must also add discounts_latest as the intermediate table
+    let has_discount_amounts = required_entities
         .iter()
-        .filter_map(|e| {
-            e.as_ref().map(|entity| {
-                let alias = match *entity {
-                    "offers_latest" => "o",
-                    "campaigns_latest" => "c",
-                    "campaign_offers" => "co",
-                    "offer_products" => "opr",
-                    "offer_phases" => "oph",
-                    "partners" => "p",
-                    "products_latest" => "pl",
-                    "prices" => "pr",
-                    other => other,
-                };
-                PlanTable {
-                    name: entity.to_string(),
-                    alias: alias.to_string(),
-                }
-            })
+        .any(|e| e.as_ref() == Some(&"discount_amounts"));
+    let has_discounts_latest = required_entities
+        .iter()
+        .any(|e| e.as_ref() == Some(&"discounts_latest"));
+
+    if has_discount_amounts && !has_discounts_latest {
+        required_entities.push(&Some("discounts_latest"));
+    }
+
+    // If we have offer_phases and discounts_latest, we can join them
+    // If we have offers_latest and discounts_latest, we can join them
+    // The join edges will be found automatically by build_joins
+
+    // Deduplicate entities (each field may reference the same table)
+    let mut unique_entities = Vec::new();
+    for entity in &required_entities {
+        if let Some(e) = entity {
+            if !unique_entities.contains(&e) {
+                unique_entities.push(e);
+            }
+        }
+    }
+
+    let tables = unique_entities
+        .into_iter()
+        .map(|entity| {
+            let alias = match *entity {
+                "offers_latest" => "o",
+                "campaigns_latest" => "c",
+                "campaign_offers" => "co",
+                "offer_products" => "opr",
+                "offer_phases" => "oph",
+                "partners" => "p",
+                "products_latest" => "pl",
+                "prices" => "pr",
+                "discounts_latest" => "d",
+                "discount_amounts" => "da",
+                other => other,
+            };
+            PlanTable {
+                name: entity.to_string(),
+                alias: alias.to_string(),
+            }
         })
         .collect::<Vec<_>>();
     let alias_map: HashMap<String, String> = tables
@@ -917,8 +1079,18 @@ fn compile_report_spec_internal(
         .collect();
     let joins = build_joins(&reg.cards, required_entities, &alias_map)?;
     let projections = translate_projections(&spec.select, &alias_map, &reg.cards, spec)?;
-    let filters = translate_filters(&spec.filters, &alias_map, &reg.cards)?;
-    let order_by = translate_ordering(&spec.order_by, &alias_map, &reg.cards)?;
+    let filters = translate_filters(
+        &spec.filters,
+        &alias_map,
+        &reg.cards,
+        spec.primary_entity.as_deref(),
+    )?;
+    let order_by = translate_ordering(
+        &spec.order_by,
+        &alias_map,
+        &reg.cards,
+        spec.primary_entity.as_deref(),
+    )?;
     let (limit, offset) = compile_pagination(spec)?;
     let plan = IntermediatePlan {
         workspace: spec.workspace.clone(),

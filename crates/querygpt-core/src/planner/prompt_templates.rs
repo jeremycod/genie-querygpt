@@ -35,17 +35,33 @@ Before writing the ReportSpec, check if the user's query contains these keywords
 - "retail" / "prepaid" / "price type" → Use field "priceType"
 - "discount" / "discount id" → Use field "discount_id"
 - "phase level discount" / "phase discount" → Use primary_entity="offer_phases" + field "discount_id"
+- "discount amount" / "discount value" → Use field "discount_amount" (auto-joins to discount_amounts table)
 
-⚠️ CROSS-TABLE FILTERING ⚠️
-You CAN filter by fields from other tables! The compiler will auto-join them.
-Example: primary_entity="offer_phases" + filter on "hulu_bundle_id" → compiler auto-joins to offers_latest
+⚠️ CROSS-TABLE FILTERING & SELECTION ⚠️
+You CAN filter AND SELECT fields from other tables! The compiler will auto-join them.
+- Filters: primary_entity="offer_phases" + filter on "hulu_bundle_id" → auto-joins to offers_latest
+- Selections: primary_entity="offer_phases" + select "name" → auto-joins to offers_latest and returns o.name
+
+🎯 PRIMARY ENTITY DETERMINES ROW-LEVEL GRANULARITY:
+- primary_entity="offers_latest" → returns one row per offer (offer_id is unique)
+- primary_entity="offer_phases" → returns one row per phase (offer can have multiple phases)
+
+When querying phases, ALWAYS include cross-table fields to provide context:
+- Include "offer_id" to show which offer the phase belongs to
+- Include "name" to show the offer name (even though primary_entity is offer_phases)
 
 EXAMPLES:
 1. "Find offers for bundle 29" → {{"field": "hulu_bundle_id", "op": "eq", "value": "29"}}
    ❌ WRONG: {{"field": "offer_id", "op": "in", "value": ["29"]}} - "29" is NOT an offer_id!
 
-2. "Find retail offers for bundle 29 with phase discounts" →
+2. "Find retail offers for bundle 29 with phase discounts and show offer info" →
    primary_entity: "offer_phases"
+   select: [
+     {{"field": "offer_id", "alias": null}},  // Cross-table: o.id
+     {{"field": "name", "alias": null}},      // Cross-table: o.name
+     {{"field": "id", "alias": null}},        // Phase id: oph.id
+     {{"field": "discount_id", "alias": null}}  // Phase discount: oph.discount_id
+   ]
    filters: [
      {{"field": "hulu_bundle_id", "op": "eq", "value": "29"}},
      {{"field": "priceType", "op": "contains", "value": "RETAIL"}}
@@ -291,17 +307,33 @@ Before writing the ReportSpec, check if the user's query contains these keywords
 - "retail" / "prepaid" / "price type" → Use field "priceType"
 - "discount" / "discount id" → Use field "discount_id"
 - "phase level discount" / "phase discount" → Use primary_entity="offer_phases" + field "discount_id"
+- "discount amount" / "discount value" → Use field "discount_amount" (auto-joins to discount_amounts table)
 
-⚠️ CROSS-TABLE FILTERING ⚠️
-You CAN filter by fields from other tables! The compiler will auto-join them.
-Example: primary_entity="offer_phases" + filter on "hulu_bundle_id" → compiler auto-joins to offers_latest
+⚠️ CROSS-TABLE FILTERING & SELECTION ⚠️
+You CAN filter AND SELECT fields from other tables! The compiler will auto-join them.
+- Filters: primary_entity="offer_phases" + filter on "hulu_bundle_id" → auto-joins to offers_latest
+- Selections: primary_entity="offer_phases" + select "name" → auto-joins to offers_latest and returns o.name
+
+🎯 PRIMARY ENTITY DETERMINES ROW-LEVEL GRANULARITY:
+- primary_entity="offers_latest" → returns one row per offer (offer_id is unique)
+- primary_entity="offer_phases" → returns one row per phase (offer can have multiple phases)
+
+When querying phases, ALWAYS include cross-table fields to provide context:
+- Include "offer_id" to show which offer the phase belongs to
+- Include "name" to show the offer name (even though primary_entity is offer_phases)
 
 EXAMPLES:
 1. "Find offers for bundle 29" → {{"field": "hulu_bundle_id", "op": "eq", "value": "29"}}
    ❌ WRONG: {{"field": "offer_id", "op": "in", "value": ["29"]}} - "29" is NOT an offer_id!
 
-2. "Find retail offers for bundle 29 with phase discounts" →
+2. "Find retail offers for bundle 29 with phase discounts and show offer info" →
    primary_entity: "offer_phases"
+   select: [
+     {{"field": "offer_id", "alias": null}},  // Cross-table: o.id
+     {{"field": "name", "alias": null}},      // Cross-table: o.name
+     {{"field": "id", "alias": null}},        // Phase id: oph.id
+     {{"field": "discount_id", "alias": null}}  // Phase discount: oph.discount_id
+   ]
    filters: [
      {{"field": "hulu_bundle_id", "op": "eq", "value": "29"}},
      {{"field": "priceType", "op": "contains", "value": "RETAIL"}}

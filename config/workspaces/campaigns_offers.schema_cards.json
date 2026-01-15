@@ -924,6 +924,120 @@
       "tags": [
         "dimension"
       ]
+    },
+    {
+      "name": "discounts_latest",
+      "kind": "materialized_view",
+      "description": "Latest version of each discount per (id, profile). Includes deleted latest rows.",
+      "primary_key": [
+        "id",
+        "profile"
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Discount identifier",
+          "pii": false
+        },
+        {
+          "name": "name",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Discount name",
+          "pii": false
+        },
+        {
+          "name": "type",
+          "data_type": "varchar",
+          "nullable": true,
+          "description": "Discount type (e.g., PERCENTAGE, FIXED_AMOUNT)",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Discount version",
+          "pii": false
+        },
+        {
+          "name": "deleted",
+          "data_type": "boolean",
+          "nullable": false,
+          "description": "Soft delete flag",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [],
+      "tags": [
+        "entity_head",
+        "latest",
+        "discounts"
+      ]
+    },
+    {
+      "name": "discount_amounts",
+      "kind": "table",
+      "description": "🔑 KEYWORD: 'discount amount' → USE THIS TABLE. Discount amounts per product. Join via discounts_latest to get discount details.",
+      "primary_key": [
+        "discount_id",
+        "product_id",
+        "profile",
+        "version"
+      ],
+      "columns": [
+        {
+          "name": "discount_id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Discount identifier",
+          "pii": false
+        },
+        {
+          "name": "product_id",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Product identifier",
+          "pii": false
+        },
+        {
+          "name": "amount",
+          "data_type": "integer",
+          "nullable": false,
+          "description": "🔑 KEYWORD: 'discount amount' → USE THIS FIELD. Discount amount in minor currency units (e.g., cents)",
+          "pii": false
+        },
+        {
+          "name": "profile",
+          "data_type": "varchar",
+          "nullable": false,
+          "description": "Tenant/profile",
+          "pii": false
+        },
+        {
+          "name": "version",
+          "data_type": "bigserial",
+          "nullable": false,
+          "description": "Discount version",
+          "pii": false
+        }
+      ],
+      "json_paths": [],
+      "common_filters": [],
+      "tags": [
+        "satellite",
+        "version_by_discount"
+      ]
     }
   ],
   "join_graph": {
@@ -935,7 +1049,9 @@
       "campaigns_latest",
       "partners",
       "products_latest",
-      "prices"
+      "prices",
+      "discounts_latest",
+      "discount_amounts"
     ],
     "edges": [
       {
@@ -1035,6 +1151,52 @@
         "safe": true,
         "notes": [
           "Join prices by price_id; price_id is nullable so use LEFT join"
+        ]
+      },
+      {
+        "from": "offers_latest",
+        "to": "discounts_latest",
+        "join_type": "left",
+        "on": [
+          "discounts_latest.id = offers_latest.discount_id",
+          "discounts_latest.profile = offers_latest.profile"
+        ],
+        "cardinality": "n:1",
+        "safe": true,
+        "notes": [
+          "Join discount head by id/profile; discount_id is nullable so use LEFT join",
+          "Note: This is offer-level discount, not phase-level discount"
+        ]
+      },
+      {
+        "from": "offer_phases",
+        "to": "discounts_latest",
+        "join_type": "left",
+        "on": [
+          "discounts_latest.id = offer_phases.discount_id",
+          "discounts_latest.profile = offer_phases.profile"
+        ],
+        "cardinality": "n:1",
+        "safe": true,
+        "notes": [
+          "Join discount head by id/profile for phase-level discounts",
+          "discount_id is nullable so use LEFT join"
+        ]
+      },
+      {
+        "from": "discounts_latest",
+        "to": "discount_amounts",
+        "join_type": "inner",
+        "on": [
+          "discount_amounts.discount_id = discounts_latest.id",
+          "discount_amounts.profile = discounts_latest.profile",
+          "discount_amounts.version = discounts_latest.version"
+        ],
+        "cardinality": "1:n",
+        "safe": true,
+        "notes": [
+          "Join discount amounts by id/profile/version",
+          "A discount can have multiple amounts (different products)"
         ]
       }
     ]

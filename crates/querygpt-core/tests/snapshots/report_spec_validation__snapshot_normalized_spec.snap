@@ -1,10 +1,12 @@
 ---
 source: crates/querygpt-core/tests/report_spec_validation.rs
+assertion_line: 55
 expression: normalized
 ---
 {
   "version": 1,
   "workspace": "campaigns_offers",
+  "primary_entity": null,
   "select": [
     {
       "field": "partnership_id",

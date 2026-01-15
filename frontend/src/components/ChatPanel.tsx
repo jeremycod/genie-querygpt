@@ -73,10 +73,10 @@ export function ChatPanel({ messages, isLoading, onSubmit }: ChatPanelProps) {
                   Find all retail offers in South Korea and Taiwan which have a price defined and show the prices for each product. Show offer id, offer name, product id, product name, price amount, currency. Show offer id, offer name, product id, product name, price amount, currency
               </button>
               <button
-                onClick={() => setInput('show offers with high CTR')}
+                onClick={() => setInput('Find all offers for bundle 29 having offer phase discount and show id, name, phase id, discount id, duration lenght, duration unit, repeat count and discount amount')}
                 className="block w-full text-left px-4 py-2 text-sm text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                Show offers with high CTR
+                  Find all offers for bundle 29 having offer phase discount and show id, name, phase id, discount id, duration lenght, duration unit, repeat count and discount amount
               </button>
             </div>
           </div>
